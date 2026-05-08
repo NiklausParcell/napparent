@@ -1,0 +1,16 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "nnm-tabular"
+version = "0.1.0"
+description = "NNM tabular + Psychic Barnacle (Rust, pyarrow)"
+requires-python = ">=3.10"
+dependencies = ["pyarrow>=15"]
+
+[tool.maturin]
+manifest-path = "nnm-tabular-py/Cargo.toml"
+python-source = "python"
+features = ["pyo3/extension-module"]
+module-name = "nnm_tabular._nnm_tabular"
