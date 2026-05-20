@@ -1,0 +1,171 @@
+% Build: pdflatex barn_effect_tight.tex (twice for references)
+\documentclass[11pt]{article}
+
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{bm}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+\newtheorem{proposition}{Proposition}
+
+\title{The Barn Effect (Tight Exposition)\\
+\large Pairwise Tabular Interaction Graphs and Row Attributions}
+\author{Niklaus Parcell\\
+\textit{Mont Ops Inc.\ / Independent Research}\\
+\texttt{nik@mont-ops.com}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Given a tabular sample with scalar outcome $Y^{(n)}\in\mathbb{R}$ (label, probability, or model output), we discretize each feature to bins, then accumulate co-occurrence counts $C_{uv}$ and outcome sums $W_{uv}$ over all unordered column pairs $(i,j)$ and encoded bin pairs $(u,v)$.
+The artifact is a sparse weighted graph $\bm{\Phi}$ with $\Phi_{uv}=(W_{uv}/C_{uv})\log_{10}(C_{uv})$ when $C_{uv}>1$, else $0$.
+Training and inference are chunk-additive; storage is $O(p^2B^2)$ in bin depth $B$.
+We record a.s.\ convergence of a scaled $\Phi_{uv}$ to the stratum conditional mean under i.i.d.\ sampling and \emph{fixed} quantization, and note identifiability limits for empty or singleton cells \cite{Agresti2013,Manski2003}.
+No experiments; full discussion appears in \texttt{barn\_effect.tex}.
+\end{abstract}
+
+\section{Problem and scope}
+We target \emph{descriptive} row-level signals from empirical co-occurrence structure, complementary to model-based explainers (e.g.\ \cite{Lundberg2017,Ribeiro2016}) and to ICE-style curve views \cite{Goldstein2015}.
+Streaming sufficiency follows \cite{Gama2014,Bifet2018}.
+This note states definitions and two propositions only.
+
+\section{Preliminaries}
+Dataset $\mathcal{D}=\{(\bm{x}^{(n)},Y^{(n)})\}_{n=1}^N$, features $i\in[p]$, values $X_i^{(n)}$.
+Column pairs $\mathcal{C}=\{(i,j):1\le i<j\le p\}$.
+Optional chunks $\mathcal{D}_k$ partition $\mathcal{D}$.
+
+\section{Phase 1: quantization}
+\begin{definition}[Bin schema]
+\label{def:bin-tight}
+Fix $B_i$.
+\emph{Numerical $i$:} range $r_i=\max_n X_i^{(n)}-\min_n X_i^{(n)}$; round to $s_i$ decimal places via $s_i=\max(0,4-\lfloor\log_{10} r_i\rfloor)$; take top-$B_i$ rounded frequencies as interior split candidates, replace largest candidate by $\max_n X_i^{(n)}$, prepend $\min_n X_i^{(n)}$, form $B_i$ interval bins.
+\emph{Categorical $i$:} keep top-$B_i$ levels; map others to $\varepsilon$.
+Write $\mathcal{B}=\{(\mathcal{L}_i,\ell^{(i)})\}$, $\ell^{(i)}:\mathrm{dom}(X_i)\to\mathcal{L}_i$.
+Disjoint column encodings identify $\mathcal{V}=\bigcup_i\mathcal{L}_i$ with $[V]$ so cross-column bin pairs are unambiguous.
+\end{definition}
+
+\section{Phase 2: accumulation and graph}
+For $(i,j)\in\mathcal{C}$, $i<j$, and each chunk, add to sparse $(W,C)$:
+\begin{equation}
+\label{eq:WC-tight}
+\Delta W_{uv}^{(k)}=\!\!\sum_{\substack{n\in\mathcal{D}_k:\\ \ell^{(i)}(X_i^{(n)})=u,\,\ell^{(j)}(X_j^{(n)})=v}}\!\! Y^{(n)},\qquad
+\Delta C_{uv}^{(k)}=\bigl|\{n\in\mathcal{D}_k:\cdots\}\bigr|.
+\end{equation}
+Summing over chunks gives global $W_{uv},C_{uv}$ (partition-invariant).
+\begin{definition}[Interaction graph]
+$\Phi_{uv}=0$ if $C_{uv}\in\{0,1\}$, else $\Phi_{uv}=(W_{uv}/C_{uv})\log_{10}(C_{uv})$.
+\end{definition}
+
+\section{Inference}
+For row $n$, $\psi_{ij}^{(n)}=\Phi_{\ell^{(i)}(X_i^{(n)}),\ell^{(j)}(X_j^{(n)})}$.
+Let $d_c^{(n)}=|\{j\neq c:\psi_{cj}^{(n)}\neq 0\}|$.
+\[
+A_c^{(n)}=\begin{cases}0 & d_c^{(n)}=0,\\ \dfrac{1}{d_c^{(n)}}\sum_{j\neq c}\psi_{cj}^{(n)} & \text{else.}\end{cases}
+\qquad
+\delta_c^{(n)}=A_c^{(n)}-\bar{Y},\quad \bar{Y}=\frac{1}{N}\sum_n Y^{(n)}.
+\]
+Global score $\bar{\delta}_c=\frac{1}{N}\sum_n\delta_c^{(n)}$.
+Attributions do \emph{not} satisfy an efficiency axiom $\sum_c\delta_c^{(n)}=Y^{(n)}-\bar{Y}$ \cite{Lundberg2017}.
+
+\section{Properties}
+\begin{remark}
+Chunks only change how \eqref{eq:WC-tight} is scheduled; totals match one pass over $\mathcal{D}$.
+\end{remark}
+
+\begin{proposition}[Complexity]
+Training: $O(p^2N)$ time, $O(p^2B^2)$ sparse keys.
+Inference per row: $O(p^2)$ lookups.
+\end{proposition}
+
+\begin{remark}[Fixed $\mathcal{B}$ for limits]
+\label{rem:fixed-tight}
+Proposition~\ref{prop:conv-tight} treats $\mathcal{B},\ell^{(i)}$ as nonrandom; Definition~\ref{def:bin-tight} instantiates empirical $\mathcal{B}_N$ on the sample.
+Joint limits for $(\mathcal{B}_N,\bm{\Phi})$ are not pursued.
+\end{remark}
+
+\begin{proposition}[Scaled a.s.\ limit for $\Phi_{uv}$]
+\label{prop:conv-tight}
+If $(\bm{x}^{(n)},Y^{(n)})$ are i.i.d., $\mathbb{E}|Y|<\infty$, $\mathcal{B}$ fixed, and $\pi=P(\ell^{(i)}(X_i)=u,\ell^{(j)}(X_j)=v)>0$, then
+\[
+\frac{\Phi_{uv}}{\log_{10}(N\pi)}\xrightarrow{\mathrm{a.s.}} \mathbb{E}\bigl[Y\mid \ell^{(i)}(X_i)=u,\ell^{(j)}(X_j)=v\bigr].
+\]
+\end{proposition}
+\begin{proof}[Sketch]
+$C_{uv}/N\to\pi$ a.s.; $\log_{10}C_{uv}-\log_{10}N\to\log_{10}\pi$ a.s.; $W_{uv}/C_{uv}\to\mathbb{E}[Y\mid u,v]$ on the stratum.
+Combine and rescale.
+\end{proof}
+
+\begin{remark}[Support]
+Zero $\Phi_{uv}$ does not imply $\mathbb{E}[Y\mid u,v]=0$: $C_{uv}=0$ means unseen; $C_{uv}=1$ is zeroed by construction.
+Sparse cells --- partial identification \cite{Manski2003}; inference cautions \cite{Agresti2013}.
+The divisor $d_c^{(n)}$ averages only partners with nonzero $\Phi$ support at inference (data-relative context), not a full $p-1$ counterfactual split.
+\end{remark}
+
+\section{Implementation (minimal)}
+Realize $(W,C)$ as one hash map on canonical $(u,v)$ with $i<j$.
+$Y^{(n)}$ may be raw $y$, class probability, or $\hat f(\bm{x}^{(n)})$ (same pipeline).
+Typical engineering: column-prefixed string keys for $\mathcal{V}$, NaN handling fixed \emph{before} binning; recompute $\bm{\Phi}$ from $(W,C)$ after all chunks.
+
+\section{Related work (one pass)}
+Co-occurrence of discretized items parallels frequent-pattern mining \cite{Agrawal1994} but $W$ supplies a supervised conditional mean, not binary support alone.
+The $\log_{10} C$ factor resembles frequency dampers in IR \cite{SparckJones1972}.
+
+\section*{Conclusion}
+The Barn Effect is a discrete pairwise sufficient-statistic summary $\bm{\Phi}$ plus row scores $\bm{\Delta}$, streamable and $O(p^2B^2)$-bounded.
+The main theoretical loose end is extending Proposition~\ref{prop:conv-tight} to empirical $\mathcal{B}_N$ (Remark~\ref{rem:fixed-tight}).
+
+\begin{thebibliography}{99}
+
+\bibitem{Agresti2013}
+A.~Agresti.
+\newblock \emph{Categorical Data Analysis}.
+\newblock Wiley, 3rd ed., 2013.
+
+\bibitem{Agrawal1994}
+R.~Agrawal, R.~Srikant.
+\newblock Fast algorithms for mining association rules.
+\newblock In \emph{VLDB}, 487--499, 1994.
+
+\bibitem{SparckJones1972}
+K.~Sp\"{a}rck Jones.
+\newblock A statistical interpretation of term specificity and its application in retrieval.
+\newblock \emph{Journal of Documentation}, 28(1):11--21, 1972.
+
+\bibitem{Goldstein2015}
+A.~Goldstein et al.
+\newblock Peeking inside the black box.
+\newblock \emph{JCGS}, 24(1):44--65, 2015.
+
+\bibitem{Manski2003}
+C.~F.~Manski.
+\newblock \emph{Partial Identification of Probability Distributions}.
+\newblock Springer, 2003.
+
+\bibitem{Lundberg2017}
+S.~M.~Lundberg, S.-I.~Lee.
+\newblock A unified approach to interpreting model predictions.
+\newblock In \emph{NeurIPS}, 2017.
+
+\bibitem{Ribeiro2016}
+M.~T.~Ribeiro, S.~Singh, C.~Guestrin.
+\newblock ``Why should I trust you?''
+\newblock In \emph{KDD}, 2016.
+
+\bibitem{Gama2014}
+J.~Gama et al.
+\newblock A survey on concept drift adaptation.
+\newblock \emph{ACM Comput.\ Surv.}, 46(4), 2014.
+
+\bibitem{Bifet2018}
+A.~Bifet et al.
+\newblock \emph{Machine Learning for Data Streams}.
+\newblock MIT Press, 2018.
+
+\end{thebibliography}
+
+\end{document}
