@@ -1,8 +1,9 @@
 //! End-to-end chunked tabular transform driver.
 
+use crate::activation::TransformConfig;
 use crate::aggregator::PairAggregator;
 use crate::arrow_io::{batch_from_map, concat_same_schema, split_batch_xy};
-use crate::preprocess::{BinDepth, PreprocessStream};
+use crate::preprocess::PreprocessStream;
 use crate::table::ColumnVec;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
@@ -23,7 +24,7 @@ fn nan0(xs: &[f32]) -> Vec<f32> {
 /// use arrow::array::{Float32Array, StringArray};
 /// use arrow::datatypes::{DataType, Field, Schema};
 /// use arrow::record_batch::RecordBatch;
-/// use napparent_tabular::{BinDepth, transform_record_batches};
+/// use napparent_tabular::{BinDepth, TransformConfig, transform_record_batches};
 /// use std::sync::Arc;
 ///
 /// let id = Arc::new(StringArray::from(vec!["a", "b"]));
@@ -35,15 +36,15 @@ fn nan0(xs: &[f32]) -> Vec<f32> {
 ///     Field::new("target", DataType::Float32, false),
 /// ]));
 /// let batch = RecordBatch::try_new(schema, vec![id, feat, target]).unwrap();
-/// let depth = BinDepth::new(4);
-/// let out = transform_record_batches(&[batch], "target", &["target".into()], &depth).unwrap();
+/// let config = TransformConfig::new(BinDepth::new(4));
+/// let out = transform_record_batches(&[batch], "target", &["target".into()], &config).unwrap();
 /// assert_eq!(out.num_rows(), 2);
 /// ```
 pub fn transform_record_batches(
     batches: &[RecordBatch],
     target: &str,
     cols_to_drop: &[String],
-    depth: &BinDepth,
+    config: &TransformConfig,
 ) -> Result<RecordBatch, String> {
     if batches.is_empty() {
         return Err("no record batches".into());
@@ -58,11 +59,11 @@ pub fn transform_record_batches(
         }
         pst.preprocess(&table)?;
     }
-    pst.finish_map(depth)?;
+    pst.finish_map(&config.bin_depth)?;
 
     let column_order: Vec<String> = pst.col_graph.names.clone();
 
-    let mut agg = PairAggregator::new();
+    let mut agg = PairAggregator::with_activation(config.activation.clone());
     let mut first = true;
     for b in batches {
         let (table, y, col_graph) = split_batch_xy(b, target, cols_to_drop)?;
@@ -130,6 +131,7 @@ fn build_output_schema(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::preprocess::BinDepth;
     use arrow::array::{Float32Array, StringArray};
     use std::sync::Arc;
 
@@ -148,8 +150,13 @@ mod tests {
     #[test]
     fn pipeline_runs() {
         let b = batch_small();
-        let depth = BinDepth::new(4);
-        let r = transform_record_batches(&[b.clone(), b], "target", &["target".into()], &depth);
+        let config = TransformConfig::new(BinDepth::new(4));
+        let r = transform_record_batches(
+            &[b.clone(), b],
+            "target",
+            &["target".into()],
+            &config,
+        );
         assert!(r.is_ok());
         let out = r.unwrap();
         assert_eq!(out.num_rows(), 4);

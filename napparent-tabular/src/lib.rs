@@ -10,6 +10,7 @@
 //!   **scalar** global mean (fixes invalid `self.avg_outcome[g]` in the Python source).
 //! - **Hash order**: Effect column order follows column index order, not `HashMap` iteration.
 
+mod activation;
 mod aggregator;
 mod arrow_io;
 mod pipeline;
@@ -17,6 +18,10 @@ mod preprocess;
 mod sigfig;
 mod table;
 
+pub use activation::{
+    ActivationConfig, EffectActivation, EffectContext, KgPairActivation, PairStats,
+    TransformConfig,
+};
 pub use aggregator::PairAggregator;
 pub use arrow_io::{batch_from_map, concat_same_schema, split_batch_xy};
 pub use pipeline::transform_record_batches;

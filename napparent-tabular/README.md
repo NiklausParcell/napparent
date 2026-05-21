@@ -4,10 +4,10 @@
 
 ## Status
 
-**0.1.0 — early release.** The API may change. The supported entry point is
-`transform_record_batches`. Lower-level types (`PairAggregator`, `PreprocessStream`)
-are exposed but unstable. Output feature columns use an `_effect` suffix (contrast
-vs global mean outcome); outcomes are in `outcomes_effect`.
+**0.2.0 — early release.** The API may change. The supported entry point is
+`transform_record_batches` with a [`TransformConfig`](https://docs.rs/napparent-tabular).
+Lower-level types (`PairAggregator`, `PreprocessStream`) are exposed but unstable.
+Output feature columns use an `_effect` suffix; outcomes are in `outcomes_effect`.
 
 ## Install
 
@@ -27,14 +27,33 @@ Build one or more Apache Arrow `RecordBatch` chunks (same schema), then run the
 tabular transform:
 
 ```rust
-use napparent_tabular::{BinDepth, transform_record_batches};
+use napparent_tabular::{BinDepth, TransformConfig, transform_record_batches};
 // construct batches: Vec<RecordBatch>
-let depth = BinDepth::new(8);
-let out = transform_record_batches(&batches, "target_col", &cols_to_drop, &depth)?;
+let config = TransformConfig::new(BinDepth::new(8));
+let out = transform_record_batches(&batches, "target_col", &cols_to_drop, &config)?;
 ```
 
 Output includes original columns, `{column}_effect` features, `Actuals`, and
 `outcomes_effect`.
+
+## Activations
+
+KG pair edges and effect columns use pluggable activations (see `activation` module).
+
+| Stage | Default | Formula |
+|-------|---------|---------|
+| KG pair | `LogFrequencyWeightedMean` | `(sum/count) * log10(count)` when count > 1 |
+| Effect | `GlobalMeanContrast` | `combined - global_mean_outcome` |
+
+Log-frequency weighting reduces bias from sparse / outlier pair cells in the HashMap KG.
+More activations (Bayesian, robust contrast, etc.) are planned.
+
+```rust
+use napparent_tabular::{ActivationConfig, BinDepth, TransformConfig};
+
+let config = TransformConfig::new(BinDepth::new(8));
+// defaults: LogFrequencyWeightedMean + GlobalMeanContrast
+```
 
 ## Python
 
@@ -43,7 +62,11 @@ Workspace bindings live in `napparent-tabular-py`. Future PyPI package:
 
 ```python
 import napparent_tabular
-out = napparent_tabular.transform_record_batches(batches, target, cols_to_drop, main_depth)
+out = napparent_tabular.transform_record_batches(
+    batches, target, cols_to_drop, main_depth,
+    kg_activation="log_frequency_weighted_mean",
+    effect_activation="global_mean_contrast",
+)
 ```
 
 ## Parity

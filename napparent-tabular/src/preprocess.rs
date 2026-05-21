@@ -86,7 +86,7 @@ impl ColumnPreprocess {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BinDepth {
     pub main: usize,
     pub per_column: HashMap<usize, usize>,

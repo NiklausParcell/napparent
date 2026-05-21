@@ -1,5 +1,6 @@
 //! Column-pair aggregation for effect features.
 
+use crate::activation::{ActivationConfig, EffectContext, PairStats};
 use crate::table::{ColGraph, ColumnVec};
 use ndarray::{Array1, Array2, Axis};
 use std::collections::hash_map::Entry;
@@ -28,6 +29,7 @@ pub struct PairAggregator {
     col_to_tup: HashMap<usize, Vec<(usize, usize)>>,
     m_divisor: f32,
     combos_initialized: bool,
+    activation: ActivationConfig,
 }
 
 impl PairAggregator {
@@ -54,6 +56,14 @@ impl PairAggregator {
             col_to_tup: HashMap::new(),
             m_divisor: 1.0,
             combos_initialized: false,
+            activation: ActivationConfig::default(),
+        }
+    }
+
+    pub fn with_activation(activation: ActivationConfig) -> Self {
+        Self {
+            activation,
+            ..Self::new()
         }
     }
 
@@ -312,23 +322,18 @@ impl PairAggregator {
         let keys: Vec<(i32, i32)> = self.vals_map.keys().copied().collect();
         for val_tup in keys {
             let arr = self.vals_map[&val_tup];
-            let (v0, v1) = val_tup;
-            let count0 = arr[1];
-            let div0 = if count0 <= 1.0 {
-                0.0
-            } else {
-                (arr[0] / count0) * count0.log10()
-            };
+            let div0 = self.activation.kg_pair.activate(PairStats {
+                sum: arr[0],
+                count: arr[1],
+            });
             self.vals_map_avg.insert(val_tup, div0);
 
-            let inv = (v1, v0);
+            let inv = (val_tup.1, val_tup.0);
             let arr_inv = self.vals_map.get(&inv).copied().unwrap_or([0.0, 0.0]);
-            let count1 = arr_inv[1];
-            let div1 = if count1 <= 1.0 {
-                0.0
-            } else {
-                (arr_inv[0] / count1) * count1.log10()
-            };
+            let div1 = self.activation.kg_pair.activate(PairStats {
+                sum: arr_inv[0],
+                count: arr_inv[1],
+            });
             self.vals_map_avg.insert(inv, div1);
         }
 
@@ -405,7 +410,13 @@ impl PairAggregator {
         for c_idx in 0..self.col_graph_names.len() {
             if let Some(arr) = col_combined.get(&c_idx) {
                 let col_name = self.col_graph_names[c_idx].clone();
-                let diffs: Vec<f32> = arr.iter().map(|x| x - self.avg_outcome).collect();
+                let ctx = EffectContext {
+                    global_mean_outcome: self.avg_outcome,
+                };
+                let diffs: Vec<f32> = arr
+                    .iter()
+                    .map(|x| self.activation.effect.activate(*x, &ctx))
+                    .collect();
                 nnm.insert(format!("{col_name}_effect"), ColumnVec::F32(diffs));
             }
         }
