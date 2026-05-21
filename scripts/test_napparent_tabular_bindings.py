@@ -47,6 +47,12 @@ def main() -> int:
         default=2_500,
         help="Rows per RecordBatch (same schema across batches).",
     )
+    parser.add_argument(
+        "--verbose",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Print pipeline progress to stderr during transform (default: true).",
+    )
     args = parser.parse_args()
 
     try:
@@ -83,6 +89,8 @@ def main() -> int:
         for start in range(0, n, step):
             batches.extend(table.slice(start, min(step, n - start)).to_batches())
 
+    print(f"Read {table.num_rows} rows from {csv_path} ({len(batches)} batches)")
+
     target = "std"
     cols_to_drop = [
         "npi",
@@ -102,12 +110,15 @@ def main() -> int:
     ]
 
     main_depth = 8
+    if args.verbose:
+        print("Running transform (progress on stderr)...", file=sys.stderr)
     out = napparent_tabular.transform_record_batches(
         batches,
         target,
         cols_to_drop,
         main_depth,
         per_column=None,
+        verbose=args.verbose,
     )
 
     print(f"Input rows: {table.num_rows}, batches: {len(batches)}")

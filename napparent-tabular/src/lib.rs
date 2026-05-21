@@ -16,6 +16,7 @@ mod arrow_io;
 mod ndarrow_bridge;
 mod pipeline;
 mod preprocess;
+mod progress;
 mod sigfig;
 mod table;
 

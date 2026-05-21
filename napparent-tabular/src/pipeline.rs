@@ -7,6 +7,7 @@ use crate::arrow_io::{
     OutcomesRef,
 };
 use crate::preprocess::PreprocessStream;
+use crate::progress::{progress_batch, progress_log, ProgressTimer};
 use crate::table::ColumnVec;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
@@ -51,22 +52,57 @@ pub fn transform_record_batches(
         return Err("no record batches".into());
     }
 
+    let verbose = config.verbose;
+    let total_timer = ProgressTimer::start();
+    let n_batches = batches.len();
+    let total_rows: usize = batches.iter().map(|b| b.num_rows()).sum();
+
+    progress_log(
+        verbose,
+        &format!("starting transform: {n_batches} batches, {total_rows} total rows"),
+    );
+
     let (_, _, cg0) = split_batch_views(&batches[0], target, cols_to_drop)?;
     let mut pst = PreprocessStream::new(cg0);
-    for b in batches {
+
+    progress_log(verbose, "pass 1/3: preprocessing (fit bins)");
+    let pass1 = ProgressTimer::start();
+    for (i, b) in batches.iter().enumerate() {
         let (chunk, _target, cg) = split_batch_views(b, target, cols_to_drop)?;
         if cg != pst.col_graph {
             return Err("inconsistent schema across chunks".into());
         }
+        progress_batch(
+            verbose,
+            i,
+            n_batches,
+            &format!(
+                "preprocess batch {}/{} ({} rows)",
+                i + 1,
+                n_batches,
+                b.num_rows()
+            ),
+        );
         pst.preprocess_batch(&chunk)?;
     }
     pst.finish_map(&config.bin_depth)?;
+    progress_log(
+        verbose,
+        &format!(
+            "pass 1/3 done in {:.1}s: bins finished, {} active feature columns",
+            pass1.elapsed_secs(),
+            pst.cols.len()
+        ),
+    );
 
     let column_order: Vec<String> = pst.col_graph.names.clone();
 
     let mut agg = PairAggregator::with_activation(config.activation.clone());
     let mut first = true;
-    for b in batches {
+
+    progress_log(verbose, "pass 2/3: building KG (pair aggregation)");
+    let pass2 = ProgressTimer::start();
+    for (i, b) in batches.iter().enumerate() {
         let (chunk, target_col, col_graph) = split_batch_views(b, target, cols_to_drop)?;
         let x_proc = pst.use_map_batch(&chunk)?;
         let outcomes = target_as_outcomes(&target_col);
@@ -76,24 +112,61 @@ pub fn transform_record_batches(
             agg.make_col_combos();
             first = false;
         }
+        progress_batch(
+            verbose,
+            i,
+            n_batches,
+            &format!("KG update batch {}/{}", i + 1, n_batches),
+        );
         agg.vals_map_updating(&x_proc, &outcomes)?;
     }
     agg.finish_map();
+    progress_log(
+        verbose,
+        &format!(
+            "pass 2/3 done in {:.1}s: KG finished, {} pair keys, global mean outcome {:.6}",
+            pass2.elapsed_secs(),
+            agg.vals_map_avg.len(),
+            agg.avg_outcome
+        ),
+    );
 
+    progress_log(verbose, "pass 3/3: applying transform (effect columns)");
+    let pass3 = ProgressTimer::start();
     let mut out_batches: Vec<RecordBatch> = Vec::new();
-    for b in batches {
+    for (i, b) in batches.iter().enumerate() {
         let (chunk, target_col, _cg) = split_batch_views(b, target, cols_to_drop)?;
         let x_proc = pst.use_map_batch(&chunk)?;
         let y = target_to_vec(&target_col);
         let outcomes = target_as_outcomes(&target_col);
         let outcomes_vec = nan0_outcomes(&outcomes);
+        progress_batch(
+            verbose,
+            i,
+            n_batches,
+            &format!("transform batch {}/{}", i + 1, n_batches),
+        );
         let nnm = agg.use_map(&x_proc, &y, &outcomes_vec)?;
         let schema = Arc::new(build_output_schema(&nnm, &column_order)?);
         let batch = batch_from_map(schema, nnm)?;
         out_batches.push(batch);
     }
+    progress_log(
+        verbose,
+        &format!("pass 3/3 done in {:.1}s", pass3.elapsed_secs()),
+    );
 
-    concat_same_schema(&out_batches)
+    let out = concat_same_schema(&out_batches)?;
+    progress_log(
+        verbose,
+        &format!(
+            "complete in {:.1}s → {} rows × {} columns",
+            total_timer.elapsed_secs(),
+            out.num_rows(),
+            out.num_columns()
+        ),
+    );
+    Ok(out)
 }
 
 fn build_output_schema(

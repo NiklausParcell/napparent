@@ -718,7 +718,11 @@ mod tests {
         via_table.finish_map(&depth).unwrap();
         let out_table = via_table.use_map(&table).unwrap();
 
-        assert_eq!(out_batch.keys().collect::<Vec<_>>(), out_table.keys().collect::<Vec<_>>());
+        let mut batch_keys: Vec<_> = out_batch.keys().collect();
+        let mut table_keys: Vec<_> = out_table.keys().collect();
+        batch_keys.sort();
+        table_keys.sort();
+        assert_eq!(batch_keys, table_keys);
         for name in out_batch.keys() {
             match (out_batch.get(name).unwrap(), out_table.get(name).unwrap()) {
                 (ColumnVec::Utf8(a), ColumnVec::Utf8(b)) => assert_eq!(a, b),

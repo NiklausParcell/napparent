@@ -4,7 +4,7 @@
 
 ## Status
 
-**0.4.0 — early release.** The API may change. The supported entry point is
+**0.4.1 — early release.** The API may change. The supported entry point is
 `transform_record_batches` with a [`TransformConfig`](https://docs.rs/napparent-tabular).
 Lower-level types (`PairAggregator`, `PreprocessStream`) are exposed but unstable.
 Output feature columns use an `_effect` suffix; outcomes are in `outcomes_effect`.
@@ -43,6 +43,9 @@ Apache Arrow `RecordBatch` data during preprocessing and aggregation training.
 Float32 effect columns are exported back to Arrow without an extra buffer copy.
 Binned label columns (`Utf8`) and KG HashMap state still allocate as before.
 
+Long runs: enable progress on stderr with `TransformConfig::new(depth).with_verbose(true)`
+(or Python `verbose=True`).
+
 ## Activations
 
 KG pair edges and effect columns use pluggable activations (see `activation` module).
@@ -74,6 +77,7 @@ out = napparent_tabular.transform_record_batches(
     batches, target, cols_to_drop, main_depth,
     kg_activation="log_frequency_weighted_mean",
     effect_activation="global_mean_contrast",
+    verbose=True,
 )
 ```
 

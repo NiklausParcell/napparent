@@ -78,6 +78,8 @@ pub struct ActivationConfig {
 pub struct TransformConfig {
     pub bin_depth: BinDepth,
     pub activation: ActivationConfig,
+    /// When true, pipeline progress is written to stderr.
+    pub verbose: bool,
 }
 
 impl TransformConfig {
@@ -85,11 +87,17 @@ impl TransformConfig {
         Self {
             bin_depth,
             activation: ActivationConfig::default(),
+            verbose: false,
         }
     }
 
     pub fn with_activation(mut self, activation: ActivationConfig) -> Self {
         self.activation = activation;
+        self
+    }
+
+    pub fn with_verbose(mut self, verbose: bool) -> Self {
+        self.verbose = verbose;
         self
     }
 }

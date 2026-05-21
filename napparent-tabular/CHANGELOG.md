@@ -1,5 +1,10 @@
 # Changelog
 
+# 0.4.1
+
+- Add opt-in pipeline progress logging via `TransformConfig::verbose` (writes to stderr)
+- Python: `transform_record_batches(..., verbose=True)`; smoke script `--verbose` (default on)
+
 # 0.4.0
 
 - Integrate [ndarrow](https://docs.rs/ndarrow) for zero-copy Arrow ↔ ndarray on numeric paths

@@ -42,6 +42,7 @@ fn config_from_args(
     per_column: Option<Vec<(usize, usize)>>,
     kg_activation: &str,
     effect_activation: &str,
+    verbose: bool,
 ) -> Result<TransformConfig, String> {
     let bin_depth = depth_from_args(main_depth, per_column);
     let activation = ActivationConfig {
@@ -51,13 +52,14 @@ fn config_from_args(
     Ok(TransformConfig {
         bin_depth,
         activation,
+        verbose,
     })
 }
 
 /// Run full tabular transform on one or more `pyarrow.RecordBatch` (same schema).
 #[pyfunction]
 #[pyo3(name = "transform_record_batches")]
-#[pyo3(signature = (batches, target, cols_to_drop, main_depth, per_column=None, kg_activation="log_frequency_weighted_mean", effect_activation="global_mean_contrast"))]
+#[pyo3(signature = (batches, target, cols_to_drop, main_depth, per_column=None, kg_activation="log_frequency_weighted_mean", effect_activation="global_mean_contrast", verbose=false))]
 fn transform_record_batches_py<'py>(
     py: Python<'py>,
     batches: Vec<Bound<'py, PyAny>>,
@@ -67,14 +69,21 @@ fn transform_record_batches_py<'py>(
     per_column: Option<Vec<(usize, usize)>>,
     kg_activation: &str,
     effect_activation: &str,
+    verbose: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let mut rs_batches = Vec::with_capacity(batches.len());
     for b in &batches {
         let rb = RecordBatch::from_pyarrow_bound(b)?;
         rs_batches.push(rb);
     }
-    let config = config_from_args(main_depth, per_column, kg_activation, effect_activation)
-        .map_err(PyValueError::new_err)?;
+    let config = config_from_args(
+        main_depth,
+        per_column,
+        kg_activation,
+        effect_activation,
+        verbose,
+    )
+    .map_err(PyValueError::new_err)?;
     let out = transform_record_batches(&rs_batches, &target, &cols_to_drop, &config)
         .map_err(PyValueError::new_err)?;
     out.into_pyarrow(py)
