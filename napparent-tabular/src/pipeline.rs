@@ -2,7 +2,10 @@
 
 use crate::activation::TransformConfig;
 use crate::aggregator::PairAggregator;
-use crate::arrow_io::{batch_from_map, concat_same_schema, split_batch_xy};
+use crate::arrow_io::{
+    batch_from_map, concat_same_schema, split_batch_views, target_as_outcomes, target_to_vec,
+    OutcomesRef,
+};
 use crate::preprocess::PreprocessStream;
 use crate::table::ColumnVec;
 use arrow::datatypes::{DataType, Field, Schema};
@@ -10,10 +13,8 @@ use arrow::record_batch::RecordBatch;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-fn nan0(xs: &[f32]) -> Vec<f32> {
-    xs.iter()
-        .map(|&x| if x.is_nan() { 0.0 } else { x })
-        .collect()
+fn nan0_outcomes(outcomes: &OutcomesRef<'_>) -> Vec<f32> {
+    outcomes.to_nan0_vec()
 }
 
 /// Chunked pipeline: preprocess passes, pair aggregation, then apply per batch.
@@ -50,14 +51,14 @@ pub fn transform_record_batches(
         return Err("no record batches".into());
     }
 
-    let (_, _, cg0) = split_batch_xy(&batches[0], target, cols_to_drop)?;
+    let (_, _, cg0) = split_batch_views(&batches[0], target, cols_to_drop)?;
     let mut pst = PreprocessStream::new(cg0);
     for b in batches {
-        let (table, _y, cg) = split_batch_xy(b, target, cols_to_drop)?;
+        let (chunk, _target, cg) = split_batch_views(b, target, cols_to_drop)?;
         if cg != pst.col_graph {
             return Err("inconsistent schema across chunks".into());
         }
-        pst.preprocess(&table)?;
+        pst.preprocess_batch(&chunk)?;
     }
     pst.finish_map(&config.bin_depth)?;
 
@@ -66,9 +67,9 @@ pub fn transform_record_batches(
     let mut agg = PairAggregator::with_activation(config.activation.clone());
     let mut first = true;
     for b in batches {
-        let (table, y, col_graph) = split_batch_xy(b, target, cols_to_drop)?;
-        let x_proc = pst.use_map(&table)?;
-        let outcomes = nan0(&y);
+        let (chunk, target_col, col_graph) = split_batch_views(b, target, cols_to_drop)?;
+        let x_proc = pst.use_map_batch(&chunk)?;
+        let outcomes = target_as_outcomes(&target_col);
 
         if first {
             agg.initialize_inputs(&col_graph, target, &column_order)?;
@@ -81,10 +82,12 @@ pub fn transform_record_batches(
 
     let mut out_batches: Vec<RecordBatch> = Vec::new();
     for b in batches {
-        let (table, y, _cg) = split_batch_xy(b, target, cols_to_drop)?;
-        let x_proc = pst.use_map(&table)?;
-        let outcomes = nan0(&y);
-        let nnm = agg.use_map(&x_proc, &y, &outcomes)?;
+        let (chunk, target_col, _cg) = split_batch_views(b, target, cols_to_drop)?;
+        let x_proc = pst.use_map_batch(&chunk)?;
+        let y = target_to_vec(&target_col);
+        let outcomes = target_as_outcomes(&target_col);
+        let outcomes_vec = nan0_outcomes(&outcomes);
+        let nnm = agg.use_map(&x_proc, &y, &outcomes_vec)?;
         let schema = Arc::new(build_output_schema(&nnm, &column_order)?);
         let batch = batch_from_map(schema, nnm)?;
         out_batches.push(batch);
@@ -103,7 +106,7 @@ fn build_output_schema(
             .get(name)
             .ok_or_else(|| format!("missing column {name} in output"))?;
         let dt = match col {
-            ColumnVec::F32(_) => DataType::Float32,
+            ColumnVec::F32(_) | ColumnVec::F32Array(_) => DataType::Float32,
             ColumnVec::Utf8(_) => DataType::Utf8,
         };
         fields.push(Field::new(name, dt, false));
@@ -113,7 +116,7 @@ fn build_output_schema(
         if nnm.contains_key(&effect) {
             let col = nnm.get(&effect).unwrap();
             let dt = match col {
-                ColumnVec::F32(_) => DataType::Float32,
+                ColumnVec::F32(_) | ColumnVec::F32Array(_) => DataType::Float32,
                 ColumnVec::Utf8(_) => DataType::Utf8,
             };
             fields.push(Field::new(&effect, dt, false));

@@ -1,8 +1,10 @@
 //! Streaming preprocessing (`preprocess_stream` in Python).
 
+use crate::arrow_io::utf8_value_at;
+use crate::ndarrow_bridge::{f32_view, f64_view};
 use crate::sigfig::round_to_significant_figures;
-use crate::table::{ChunkTable, ColGraph, ColumnVec};
-use ndarray::Array1;
+use crate::table::{BatchChunk, BatchColumn, ChunkTable, ColGraph, ColumnVec};
+use ndarray::ArrayView1;
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -140,8 +142,22 @@ impl PreprocessStream {
         Ok(())
     }
 
+    pub fn preprocess_batch(&mut self, chunk: &BatchChunk) -> Result<(), String> {
+        if self.finished {
+            return Err("preprocess called after finish_map".into());
+        }
+        chunk.validate()?;
+        if self.num_chunks == 0 {
+            self.initialize_preprocess_map_batch(chunk)?;
+        } else {
+            self.update_preprocess_map_batch(chunk)?;
+        }
+        self.num_chunks += 1;
+        Ok(())
+    }
+
     fn column_is_numeric(col: &ColumnVec) -> bool {
-        matches!(col, ColumnVec::F32(_))
+        matches!(col, ColumnVec::F32(_) | ColumnVec::F32Array(_))
     }
 
     fn initialize_preprocess_map(&mut self, chunk: &ChunkTable) -> Result<(), String> {
@@ -153,7 +169,7 @@ impl PreprocessStream {
                 .ok_or_else(|| format!("missing column index {col}"))?;
             if Self::column_is_numeric(c) {
                 let arr = Self::col_as_f32(c)?;
-                let arr = round_to_significant_figures(&Array1::from(arr), 4);
+                let arr = round_to_significant_figures(ArrayView1::from(arr.as_slice()), 4);
                 let arr = nan_to_zero_f32(arr.to_vec());
                 let min_v = arr.iter().cloned().fold(f32::INFINITY, f32::min);
                 let max_v = arr.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
@@ -188,7 +204,7 @@ impl PreprocessStream {
             match cp.bin_type {
                 BinType::Numerical => {
                     let arr = Self::col_as_f32(c)?;
-                    let arr = round_to_significant_figures(&Array1::from(arr), 4);
+                    let arr = round_to_significant_figures(ArrayView1::from(arr.as_slice()), 4);
                     let arr = nan_to_zero_f32(arr.to_vec());
                     let min_v = arr.iter().cloned().fold(f32::INFINITY, f32::min);
                     let max_v = arr.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
@@ -214,9 +230,91 @@ impl PreprocessStream {
         Ok(())
     }
 
+    fn initialize_preprocess_map_batch(&mut self, chunk: &BatchChunk) -> Result<(), String> {
+        self.preprocess_map.clear();
+        for &col in &self.cols {
+            let c = chunk
+                .cols
+                .get(col)
+                .ok_or_else(|| format!("missing column index {col}"))?;
+            if c.is_numeric() {
+                let arr = Self::batch_numeric_processed(c)?;
+                let min_v = arr.iter().cloned().fold(f32::INFINITY, f32::min);
+                let max_v = arr.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                let mut cp = ColumnPreprocess::new_numerical(min_v, max_v);
+                merge_uniques_numerical(&mut cp.values, &arr);
+                self.preprocess_map.insert(col, cp);
+            } else {
+                let mut cp = ColumnPreprocess::new_categorical();
+                merge_uniques_categorical_arrow(&mut cp.values, c)?;
+                self.preprocess_map.insert(col, cp);
+            }
+        }
+        Ok(())
+    }
+
+    fn update_preprocess_map_batch(&mut self, chunk: &BatchChunk) -> Result<(), String> {
+        for &col in &self.cols {
+            let c = chunk
+                .cols
+                .get(col)
+                .ok_or_else(|| format!("missing column index {col}"))?;
+            let cp = self
+                .preprocess_map
+                .get_mut(&col)
+                .ok_or_else(|| format!("preprocess_map missing col {col}"))?;
+            match cp.bin_type {
+                BinType::Numerical => {
+                    let arr = Self::batch_numeric_processed(c)?;
+                    let min_v = arr.iter().cloned().fold(f32::INFINITY, f32::min);
+                    let max_v = arr.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                    if min_v < cp.min_v {
+                        cp.min_v = min_v;
+                    }
+                    if max_v > cp.max_v {
+                        cp.max_v = max_v;
+                    }
+                    merge_uniques_numerical(&mut cp.values, &arr);
+                }
+                BinType::Categorical => {
+                    merge_uniques_categorical_arrow(&mut cp.values, c)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn batch_numeric_processed(col: &BatchColumn) -> Result<Vec<f32>, String> {
+        match col {
+            BatchColumn::F32(a) => {
+                let view = f32_view(a)?;
+                Ok(nan_to_zero_f32(
+                    round_to_significant_figures(view, 4).to_vec(),
+                ))
+            }
+            BatchColumn::F64(a) => {
+                let view = f64_view(a)?;
+                let f32s: Vec<f32> = view.iter().map(|&x| x as f32).collect();
+                Ok(nan_to_zero_f32(
+                    round_to_significant_figures(ArrayView1::from(f32s.as_slice()), 4).to_vec(),
+                ))
+            }
+            BatchColumn::Owned(ColumnVec::F32(v)) => {
+                Ok(nan_to_zero_f32(
+                    round_to_significant_figures(ArrayView1::from(v.as_slice()), 4).to_vec(),
+                ))
+            }
+            BatchColumn::Owned(ColumnVec::F32Array(a)) => Ok(nan_to_zero_f32(
+                round_to_significant_figures(a.view(), 4).to_vec(),
+            )),
+            _ => Err("expected numeric column".into()),
+        }
+    }
+
     fn col_as_f32(c: &ColumnVec) -> Result<Vec<f32>, String> {
         match c {
             ColumnVec::F32(v) => Ok(v.clone()),
+            ColumnVec::F32Array(a) => Ok(a.iter().copied().collect()),
             ColumnVec::Utf8(_) => Err("expected numeric column".into()),
         }
     }
@@ -225,6 +323,7 @@ impl PreprocessStream {
         match c {
             ColumnVec::Utf8(v) => Ok(v.clone()),
             ColumnVec::F32(v) => Ok(v.iter().map(|x| x.to_string()).collect()),
+            ColumnVec::F32Array(a) => Ok(a.iter().map(|x| x.to_string()).collect()),
         }
     }
 
@@ -338,6 +437,47 @@ impl PreprocessStream {
         }
         Ok(out)
     }
+
+    pub fn use_map_batch(
+        &self,
+        chunk: &BatchChunk,
+    ) -> Result<HashMap<String, ColumnVec>, String> {
+        if !self.finished {
+            return Err("finish_map must be called before use_map".into());
+        }
+        chunk.validate()?;
+        let mut out = HashMap::new();
+        for col_idx in 0..chunk.names.len() {
+            let name = chunk.names[col_idx].clone();
+            let col = chunk.cols.get(col_idx).unwrap();
+            if let Some(cp) = self.preprocess_map.get(&col_idx) {
+                match cp.bin_type {
+                    BinType::Numerical => {
+                        let arr = Self::batch_numeric_for_labels(col)?;
+                        let labels = vectorized_map_numerical_bins(cp, &arr);
+                        out.insert(name, ColumnVec::Utf8(labels));
+                    }
+                    BinType::Categorical => {
+                        let labels = map_categorical_bins_arrow(cp, col)?;
+                        out.insert(name, ColumnVec::Utf8(labels));
+                    }
+                }
+            } else {
+                out.insert(name, batch_column_to_column_vec(col)?);
+            }
+        }
+        Ok(out)
+    }
+
+    fn batch_numeric_for_labels(col: &BatchColumn) -> Result<Vec<f32>, String> {
+        let mut arr = Self::batch_numeric_processed(col)?;
+        for x in &mut arr {
+            if x.is_nan() {
+                *x = 0.0;
+            }
+        }
+        Ok(arr)
+    }
 }
 
 fn key_cmp_for_sort(a: &ValueKey, b: &ValueKey) -> std::cmp::Ordering {
@@ -366,6 +506,85 @@ fn merge_uniques_categorical(acc: &mut HashMap<ValueKey, u64>, arr: &[String]) {
     for t in arr {
         let k = ValueKey::Str(t.clone());
         *acc.entry(k).or_insert(0) += 1;
+    }
+}
+
+fn normalize_nan_str(s: &mut String) {
+    if s == "nan" || s.eq_ignore_ascii_case("nan") {
+        *s = "empty".to_string();
+    }
+}
+
+fn merge_uniques_categorical_arrow(
+    acc: &mut HashMap<ValueKey, u64>,
+    col: &BatchColumn,
+) -> Result<(), String> {
+    match col {
+        BatchColumn::Utf8(a) => {
+            for i in 0..a.len() {
+                let mut s = utf8_value_at(a, i);
+                normalize_nan_str(&mut s);
+                *acc.entry(ValueKey::Str(s)).or_insert(0) += 1;
+            }
+            Ok(())
+        }
+        BatchColumn::Owned(ColumnVec::Utf8(v)) => {
+            for t in v {
+                let mut s = t.clone();
+                normalize_nan_str(&mut s);
+                *acc.entry(ValueKey::Str(s)).or_insert(0) += 1;
+            }
+            Ok(())
+        }
+        _ => {
+            let s = batch_column_to_strings(col)?;
+            merge_uniques_categorical(acc, &s);
+            Ok(())
+        }
+    }
+}
+
+fn batch_column_to_strings(col: &BatchColumn) -> Result<Vec<String>, String> {
+    match col {
+        BatchColumn::Utf8(a) => Ok((0..a.len()).map(|i| utf8_value_at(a, i)).collect()),
+        BatchColumn::Owned(c) => match c {
+            ColumnVec::Utf8(v) => Ok(v.clone()),
+            ColumnVec::F32(v) => Ok(v.iter().map(|x| x.to_string()).collect()),
+            ColumnVec::F32Array(a) => Ok(a.iter().map(|x| x.to_string()).collect()),
+        },
+        BatchColumn::F32(a) => Ok(crate::arrow_io::col_to_f32(a)?
+            .into_iter()
+            .map(|x| x.to_string())
+            .collect()),
+        BatchColumn::F64(a) => Ok(crate::arrow_io::col_to_f32(a)?
+            .into_iter()
+            .map(|x| x.to_string())
+            .collect()),
+    }
+}
+
+fn batch_column_to_column_vec(col: &BatchColumn) -> Result<ColumnVec, String> {
+    crate::arrow_io::batch_column_to_owned(col)
+}
+
+fn map_categorical_bins_arrow(cp: &ColumnPreprocess, col: &BatchColumn) -> Result<Vec<String>, String> {
+    match col {
+        BatchColumn::Utf8(a) => {
+            let mut out = Vec::with_capacity(a.len());
+            for i in 0..a.len() {
+                let mut s = utf8_value_at(a, i);
+                normalize_nan_str(&mut s);
+                out.push(map_categorical_bins(cp, &s));
+            }
+            Ok(out)
+        }
+        _ => {
+            let mut s = batch_column_to_strings(col)?;
+            for t in &mut s {
+                normalize_nan_str(t);
+            }
+            Ok(s.into_iter().map(|val| map_categorical_bins(cp, &val)).collect())
+        }
     }
 }
 
@@ -450,6 +669,11 @@ fn map_categorical_bins(cp: &ColumnPreprocess, val: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::arrow_io::{batch_chunk_to_table, split_batch_views};
+    use arrow::array::{Float32Array, StringArray};
+    use arrow::datatypes::{DataType, Field, Schema};
+    use arrow::record_batch::RecordBatch;
+    use std::sync::Arc;
 
     #[test]
     fn accounted_bins_ties_keep_extending() {
@@ -462,5 +686,52 @@ mod tests {
         ];
         let r = return_accounted_bins(&items, 2);
         assert!(r.len() >= 2);
+    }
+
+    fn sample_batch() -> RecordBatch {
+        let id = Arc::new(StringArray::from(vec!["a", "b"]));
+        let feat = Arc::new(Float32Array::from(vec![1.0_f32, 20.0]));
+        let target = Arc::new(Float32Array::from(vec![0.5_f32, 1.5]));
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("feat", DataType::Float32, false),
+            Field::new("target", DataType::Float32, false),
+        ]));
+        RecordBatch::try_new(schema, vec![id, feat, target]).unwrap()
+    }
+
+    #[test]
+    fn preprocess_batch_matches_owned_path() {
+        let batch = sample_batch();
+        let (chunk, _, cg) =
+            split_batch_views(&batch, "target", &["target".into()]).unwrap();
+        let table = batch_chunk_to_table(&chunk).unwrap();
+
+        let depth = BinDepth::new(4);
+        let mut via_batch = PreprocessStream::new(cg.clone());
+        via_batch.preprocess_batch(&chunk).unwrap();
+        via_batch.finish_map(&depth).unwrap();
+        let out_batch = via_batch.use_map_batch(&chunk).unwrap();
+
+        let mut via_table = PreprocessStream::new(cg);
+        via_table.preprocess(&table).unwrap();
+        via_table.finish_map(&depth).unwrap();
+        let out_table = via_table.use_map(&table).unwrap();
+
+        assert_eq!(out_batch.keys().collect::<Vec<_>>(), out_table.keys().collect::<Vec<_>>());
+        for name in out_batch.keys() {
+            match (out_batch.get(name).unwrap(), out_table.get(name).unwrap()) {
+                (ColumnVec::Utf8(a), ColumnVec::Utf8(b)) => assert_eq!(a, b),
+                (ColumnVec::F32(a), ColumnVec::F32(b)) => assert_eq!(a, b),
+                (ColumnVec::F32Array(a), ColumnVec::F32Array(b)) => assert_eq!(a, b),
+                (ColumnVec::F32Array(a), ColumnVec::F32(b)) => {
+                    assert_eq!(a.iter().copied().collect::<Vec<_>>(), *b)
+                }
+                (ColumnVec::F32(a), ColumnVec::F32Array(b)) => {
+                    assert_eq!(a, &b.iter().copied().collect::<Vec<_>>())
+                }
+                other => panic!("unexpected column type pairing for {name}: {other:?}"),
+            }
+        }
     }
 }

@@ -13,6 +13,7 @@
 mod activation;
 mod aggregator;
 mod arrow_io;
+mod ndarrow_bridge;
 mod pipeline;
 mod preprocess;
 mod sigfig;
@@ -23,8 +24,10 @@ pub use activation::{
     TransformConfig,
 };
 pub use aggregator::PairAggregator;
-pub use arrow_io::{batch_from_map, concat_same_schema, split_batch_xy};
+pub use arrow_io::{
+    batch_from_map, concat_same_schema, split_batch_views, split_batch_xy, OutcomesRef,
+};
 pub use pipeline::transform_record_batches;
 pub use preprocess::{BinDepth, BinType, ColumnPreprocess, PreprocessStream, ValueKey};
 pub use sigfig::round_to_significant_figures;
-pub use table::{ChunkTable, ColGraph, ColumnVec, OutcomeSource};
+pub use table::{BatchChunk, BatchColumn, ChunkTable, ColGraph, ColumnVec, OutcomeSource, TargetColumn};

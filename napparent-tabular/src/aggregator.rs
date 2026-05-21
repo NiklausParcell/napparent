@@ -1,8 +1,9 @@
 //! Column-pair aggregation for effect features.
 
 use crate::activation::{ActivationConfig, EffectContext, PairStats};
+use crate::arrow_io::OutcomesRef;
 use crate::table::{ColGraph, ColumnVec};
-use ndarray::{Array1, Array2, Axis};
+use ndarray::{Array1, Array2};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 
@@ -159,6 +160,16 @@ impl PairAggregator {
                     }
                 })
                 .collect(),
+            ColumnVec::F32Array(v) => v
+                .iter()
+                .map(|&x| {
+                    if x.is_finite() {
+                        x.to_string()
+                    } else {
+                        "0".to_string()
+                    }
+                })
+                .collect(),
             ColumnVec::Utf8(v) => v
                 .iter()
                 .map(|s| {
@@ -248,35 +259,35 @@ impl PairAggregator {
     pub fn vals_map_updating(
         &mut self,
         x_processed: &HashMap<String, ColumnVec>,
-        outcomes: &[f32],
+        outcomes: &OutcomesRef<'_>,
     ) -> Result<(), String> {
         let mat = self.convert_ff_to_string_matrix(x_processed)?;
         self.val_checking(&mat)?;
         let x_mapped = self.x_to_vec_mapped(&mat)?;
-        let outs = Array1::from(outcomes.to_vec());
 
-        self.avg_outcome_sum += outs.sum();
-        self.avg_count += outs.len() as u64;
+        self.avg_outcome_sum += outcomes.sum();
+        self.avg_count += outcomes.len() as u64;
 
-        let n = outs.len();
+        let n = outcomes.len();
         let one_percent = ((n as f32) * 0.01).floor() as usize;
 
         for &c in &self.col_array {
             let &(c1, c2) = self.tup_combos.get(&c).unwrap();
             let a = x_mapped.get(&c1).unwrap();
             let b = x_mapped.get(&c2).unwrap();
-            let stacked =
-                ndarray::stack(Axis(1), &[a.view(), b.view()]).map_err(|e| e.to_string())?;
-            let rows: Vec<[i32; 2]> = stacked.rows().into_iter().map(|r| [r[0], r[1]]).collect();
 
             let mut local: HashMap<(i32, i32), PairStats> = HashMap::new();
-            for (i, r) in rows.iter().enumerate() {
-                let key = canonical_val_pair(r[0], r[1]);
+            for i in 0..n {
+                let key = canonical_val_pair(a[i], b[i]);
+                let out_i = {
+                    let x = outcomes.get(i);
+                    if x.is_nan() { 0.0 } else { x }
+                };
                 let entry = local.entry(key).or_insert(PairStats {
                     sum: 0.0,
                     count: 0.0,
                 });
-                entry.sum += outs[i];
+                entry.sum += out_i;
                 entry.count += 1.0;
             }
 
@@ -381,16 +392,20 @@ impl PairAggregator {
                 let ctx = EffectContext {
                     global_mean_outcome: self.avg_outcome,
                 };
-                let diffs: Vec<f32> = arr
-                    .iter()
-                    .map(|x| self.activation.effect.activate(*x, &ctx))
-                    .collect();
-                nnm.insert(format!("{col_name}_effect"), ColumnVec::F32(diffs));
+                let diffs = Array1::from(
+                    arr.iter()
+                        .map(|x| self.activation.effect.activate(*x, &ctx))
+                        .collect::<Vec<f32>>(),
+                );
+                nnm.insert(format!("{col_name}_effect"), ColumnVec::F32Array(diffs));
             }
         }
 
-        nnm.insert("Actuals".into(), ColumnVec::F32(y.to_vec()));
-        nnm.insert("outcomes_effect".into(), ColumnVec::F32(outcomes.to_vec()));
+        nnm.insert("Actuals".into(), ColumnVec::F32Array(Array1::from(y.to_vec())));
+        nnm.insert(
+            "outcomes_effect".into(),
+            ColumnVec::F32Array(Array1::from(outcomes.to_vec())),
+        );
         Ok(nnm)
     }
 }
@@ -425,6 +440,10 @@ mod tests {
         x
     }
 
+    fn outcomes_slice(v: &[f32]) -> crate::arrow_io::OutcomesRef<'_> {
+        crate::arrow_io::OutcomesRef::Slice(v)
+    }
+
     #[test]
     fn canonical_val_pair_commutes() {
         assert_eq!(canonical_val_pair(5, 7), canonical_val_pair(7, 5));
@@ -435,7 +454,7 @@ mod tests {
     fn vals_map_merges_orientations() {
         let mut agg = two_col_aggregator();
         let x = oriented_pair_data();
-        agg.vals_map_updating(&x, &[1.0, 2.0]).unwrap();
+        agg.vals_map_updating(&x, &outcomes_slice(&[1.0, 2.0])).unwrap();
 
         let id5 = agg.val_map_str["5"];
         let id7 = agg.val_map_str["7"];
@@ -451,7 +470,7 @@ mod tests {
     fn finish_map_no_duplicate_keys() {
         let mut agg = two_col_aggregator();
         let x = oriented_pair_data();
-        agg.vals_map_updating(&x, &[1.0, 2.0]).unwrap();
+        agg.vals_map_updating(&x, &outcomes_slice(&[1.0, 2.0])).unwrap();
         agg.finish_map();
         assert_eq!(agg.vals_map_avg.len(), agg.vals_map.len());
     }
@@ -460,7 +479,7 @@ mod tests {
     fn lookup_symmetric() {
         let mut agg = two_col_aggregator();
         let x = oriented_pair_data();
-        agg.vals_map_updating(&x, &[1.0, 2.0]).unwrap();
+        agg.vals_map_updating(&x, &outcomes_slice(&[1.0, 2.0])).unwrap();
         agg.finish_map();
 
         let col_vals = agg.make_cvto_inner(&x).unwrap();

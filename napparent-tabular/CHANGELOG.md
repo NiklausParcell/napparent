@@ -1,5 +1,15 @@
 # Changelog
 
+# 0.4.0
+
+- Integrate [ndarrow](https://docs.rs/ndarrow) for zero-copy Arrow ↔ ndarray on numeric paths
+- Bump `ndarray` to 0.17 (required by ndarrow)
+- Add `split_batch_views`, `BatchChunk`, `BatchColumn`, `TargetColumn`, `OutcomesRef` for batch-scoped column views
+- Pipeline uses `preprocess_batch` / `use_map_batch` with shared `ArrayRef` buffers instead of copying Float32 columns at ingest
+- Effect columns export via `ColumnVec::F32Array` + `IntoArrow` (zero-copy `RecordBatch` build)
+- `vals_map_updating` accepts `OutcomesRef` (view over null-free Float32 target when possible)
+- `split_batch_xy` retained as owned-materialization wrapper for external callers
+
 # 0.3.0
 
 - KG value pairs use canonical unordered keys `(min, max)` in `vals_map` and `vals_map_avg`

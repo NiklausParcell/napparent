@@ -2,7 +2,7 @@
 
 The current problem in modern machine learning is that it was meant to be predictive, rather than physical. As the world transitions to more of a physical AI paradigm, new machine learning is needed to fit that paradigm. Therefore, what we are building in this scope is a mapping from an image to word-vector-space using an AI transparency algorithm built on knowledge graph embeddings.
 
-Ideally, we want to use nabled -- a Rust crate a partner and I have been working on. nabled is a pure linear algebra library written in Rust. We can use this for the backbone of the algorithm.
+Ideally, we want to use nabled -- a Rust crate a partner and I have been working on. nabled is a pure linear algebra library written in Rust. We can use this for the backbone of the algorithm. nabled uses **ndarrow** as its Arrow/ndarray bridge; napparent-tabular now shares that same bridge on numeric column paths.
 
 ## Concepts to use and build upon
 

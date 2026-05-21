@@ -4,7 +4,7 @@
 
 ## Status
 
-**0.3.0 — early release.** The API may change. The supported entry point is
+**0.4.0 — early release.** The API may change. The supported entry point is
 `transform_record_batches` with a [`TransformConfig`](https://docs.rs/napparent-tabular).
 Lower-level types (`PairAggregator`, `PreprocessStream`) are exposed but unstable.
 Output feature columns use an `_effect` suffix; outcomes are in `outcomes_effect`.
@@ -35,6 +35,13 @@ let out = transform_record_batches(&batches, "target_col", &cols_to_drop, &confi
 
 Output includes original columns, `{column}_effect` features, `Actuals`, and
 `outcomes_effect`.
+
+## Arrow / ndarray bridge
+
+Numeric columns use [ndarrow](https://docs.rs/ndarrow) for zero-copy views from
+Apache Arrow `RecordBatch` data during preprocessing and aggregation training.
+Float32 effect columns are exported back to Arrow without an extra buffer copy.
+Binned label columns (`Utf8`) and KG HashMap state still allocate as before.
 
 ## Activations
 
