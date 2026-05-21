@@ -116,7 +116,7 @@ def main() -> int:
 
     main_depth = 8
     if args.verbose:
-        print("Running transform (progress on stderr)...", file=sys.stderr)
+        print("Running transform (progress bar on stderr)...", file=sys.stderr)
     out = napparent_tabular.transform_record_batches(
         batches,
         target,

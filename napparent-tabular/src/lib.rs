@@ -13,6 +13,7 @@
 mod activation;
 mod aggregator;
 mod arrow_io;
+mod cancel;
 mod ndarrow_bridge;
 mod pipeline;
 mod preprocess;
@@ -24,6 +25,7 @@ pub use activation::{
     ActivationConfig, EffectActivation, EffectContext, KgPairActivation, PairStats,
     TransformConfig, TransformLimits,
 };
+pub use cancel::{CancelToken, CtrlcGuard, INTERRUPT_MSG};
 pub use aggregator::PairAggregator;
 pub use arrow_io::{
     batch_from_map, concat_same_schema, split_batch_views, split_batch_xy, OutcomesRef,

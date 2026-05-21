@@ -1,5 +1,13 @@
 # Changelog
 
+# 0.6.0
+
+- `verbose=true` shows in-place indicatif progress bars on stderr (batch count + percent per pass)
+- Non-TTY stderr (piped/CI) falls back to throttled line logs
+- Cooperative Ctrl+C: pipeline checks cancellation between batches; Python raises `KeyboardInterrupt`
+- Rust: `CancelToken`, optional `CancelToken::with_ctrlc_handler()` for standalone SIGINT
+- `transform_record_batches_chunked` accepts optional `&CancelToken`
+
 # 0.5.0
 
 - Add `TransformLimits` on `TransformConfig` for fail-fast caps (`max_rows`, `max_active_columns`, `max_col_pairs`, `max_vals_map_keys`)

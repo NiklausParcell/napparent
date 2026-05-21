@@ -3,12 +3,13 @@
 use arrow::record_batch::RecordBatch;
 use arrow_pyarrow::{FromPyArrow, IntoPyArrow};
 use napparent_tabular::{
-    split_batch_xy, transform_record_batches, transform_record_batches_chunked,
-    ActivationConfig, BinDepth, EffectActivation, KgPairActivation, TransformConfig,
+    split_batch_xy, transform_record_batches_chunked, CancelToken, ActivationConfig, BinDepth,
+    EffectActivation, KgPairActivation, TransformConfig, concat_same_schema,
 };
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyKeyboardInterrupt, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
+use std::sync::Arc;
 
 fn depth_from_args(main: usize, per_column: Option<Vec<(usize, usize)>>) -> BinDepth {
     let mut d = BinDepth::new(main);
@@ -58,14 +59,57 @@ fn config_from_args(
     })
 }
 
-fn batches_from_py<'py>(
-    batches: &[Bound<'py, PyAny>],
-) -> PyResult<Vec<RecordBatch>> {
+fn batches_from_py<'py>(batches: &[Bound<'py, PyAny>]) -> PyResult<Vec<RecordBatch>> {
     let mut rs_batches = Vec::with_capacity(batches.len());
     for b in batches {
         rs_batches.push(RecordBatch::from_pyarrow_bound(b)?);
     }
     Ok(rs_batches)
+}
+
+fn map_transform_err(e: String) -> PyErr {
+    if e.contains("interrupted") {
+        PyErr::new::<PyKeyboardInterrupt, _>(e)
+    } else {
+        PyValueError::new_err(e)
+    }
+}
+
+fn py_interrupt_token() -> CancelToken {
+    CancelToken::with_hook(Arc::new(|| {
+        Python::attach(|py| py.check_signals())
+            .map_err(|e| format!("interrupted by user: {e}"))
+    }))
+}
+
+fn run_chunked<'py>(
+    py: Python<'py>,
+    rs_batches: &[RecordBatch],
+    target: &str,
+    cols_to_drop: &[String],
+    config: &TransformConfig,
+) -> PyResult<Vec<RecordBatch>> {
+    let cancel = py_interrupt_token();
+    py.detach(|| {
+        transform_record_batches_chunked(rs_batches, target, cols_to_drop, config, Some(&cancel))
+    })
+    .map_err(map_transform_err)
+}
+
+fn run_concat<'py>(
+    py: Python<'py>,
+    rs_batches: &[RecordBatch],
+    target: &str,
+    cols_to_drop: &[String],
+    config: &TransformConfig,
+) -> PyResult<RecordBatch> {
+    let cancel = py_interrupt_token();
+    py.detach(|| {
+        let chunks =
+            transform_record_batches_chunked(rs_batches, target, cols_to_drop, config, Some(&cancel))?;
+        concat_same_schema(&chunks)
+    })
+    .map_err(map_transform_err)
 }
 
 /// Run full tabular transform; returns one concatenated `pyarrow.RecordBatch` by default.
@@ -95,12 +139,10 @@ fn transform_record_batches_py<'py>(
     .map_err(PyValueError::new_err)?;
 
     if concat {
-        let out = transform_record_batches(&rs_batches, &target, &cols_to_drop, &config)
-            .map_err(PyValueError::new_err)?;
+        let out = run_concat(py, &rs_batches, &target, &cols_to_drop, &config)?;
         out.into_pyarrow(py)
     } else {
-        let chunks = transform_record_batches_chunked(&rs_batches, &target, &cols_to_drop, &config)
-            .map_err(PyValueError::new_err)?;
+        let chunks = run_chunked(py, &rs_batches, &target, &cols_to_drop, &config)?;
         let py_batches = PyList::empty(py);
         for batch in chunks {
             py_batches.append(batch.into_pyarrow(py)?)?;
@@ -133,8 +175,7 @@ fn transform_record_batches_chunked_py<'py>(
         verbose,
     )
     .map_err(PyValueError::new_err)?;
-    let chunks = transform_record_batches_chunked(&rs_batches, &target, &cols_to_drop, &config)
-        .map_err(PyValueError::new_err)?;
+    let chunks = run_chunked(py, &rs_batches, &target, &cols_to_drop, &config)?;
     let py_batches = PyList::empty(py);
     for batch in chunks {
         py_batches.append(batch.into_pyarrow(py)?)?;

@@ -4,7 +4,7 @@
 
 ## Status
 
-**0.5.0 — early release.** The API may change. The supported entry point is
+**0.6.0 — early release.** The API may change. The supported entry point is
 `transform_record_batches` with a [`TransformConfig`](https://docs.rs/napparent-tabular).
 For large datasets, prefer [`transform_record_batches_chunked`](https://docs.rs/napparent-tabular)
 to avoid holding a second full copy at concat time.
@@ -62,8 +62,10 @@ Apache Arrow `RecordBatch` data during preprocessing and aggregation training.
 Float32 effect columns are exported back to Arrow without an extra buffer copy.
 Binned label columns (`Utf8`) and KG HashMap state still allocate as before.
 
-Long runs: enable progress on stderr with `TransformConfig::new(depth).with_verbose(true)`
-(or Python `verbose=True`).
+Long runs: enable progress with `TransformConfig::new(depth).with_verbose(true)`
+(or Python `verbose=True`). On an interactive terminal this shows an in-place progress
+bar per pass; when stderr is piped, it falls back to throttled line logs.
+Ctrl+C cancels between batches (Python: `KeyboardInterrupt`).
 
 ## Activations
 

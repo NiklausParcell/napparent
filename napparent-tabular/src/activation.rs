@@ -87,7 +87,7 @@ pub struct TransformLimits {
 pub struct TransformConfig {
     pub bin_depth: BinDepth,
     pub activation: ActivationConfig,
-    /// When true, pipeline progress is written to stderr.
+    /// When true, show progress on stderr (in-place bar on a TTY, line logs when piped).
     pub verbose: bool,
     pub limits: TransformLimits,
 }
