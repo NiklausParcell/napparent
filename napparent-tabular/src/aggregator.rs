@@ -77,6 +77,10 @@ impl PairAggregator {
         }
     }
 
+    pub fn vals_map_len(&self) -> usize {
+        self.vals_map.len()
+    }
+
     pub fn initialize_inputs(
         &mut self,
         col_info: &ColGraph,
@@ -148,66 +152,7 @@ impl PairAggregator {
         self.combos_initialized = true;
     }
 
-    fn help_x_col_slice(col: &ColumnVec) -> Vec<String> {
-        match col {
-            ColumnVec::F32(v) => v
-                .iter()
-                .map(|&x| {
-                    if x.is_finite() {
-                        x.to_string()
-                    } else {
-                        "0".to_string()
-                    }
-                })
-                .collect(),
-            ColumnVec::F32Array(v) => v
-                .iter()
-                .map(|&x| {
-                    if x.is_finite() {
-                        x.to_string()
-                    } else {
-                        "0".to_string()
-                    }
-                })
-                .collect(),
-            ColumnVec::Utf8(v) => v
-                .iter()
-                .map(|s| {
-                    let t = s.as_str();
-                    if t.is_empty() {
-                        "no data".to_string()
-                    } else {
-                        t.to_string()
-                    }
-                })
-                .collect(),
-        }
-    }
-
-    fn convert_ff_to_string_matrix(
-        &self,
-        x: &HashMap<String, ColumnVec>,
-    ) -> Result<Vec<Vec<String>>, String> {
-        let n = x
-            .get(&self.col_graph_names[0])
-            .map(|c| c.len())
-            .ok_or_else(|| "missing first col".to_string())?;
-        let m = self.col_graph_names.len();
-        let mut mat = vec![vec![String::new(); m]; n];
-        for (j, name) in self.col_graph_names.iter().enumerate() {
-            let col = x.get(name).ok_or_else(|| format!("missing col {name}"))?;
-            let mapped = Self::help_x_col_slice(col);
-            if mapped.len() != n {
-                return Err("column length mismatch in convert_ff".into());
-            }
-            for i in 0..n {
-                mat[i][j] = mapped[i].clone();
-            }
-        }
-        Ok(mat)
-    }
-
-    fn val_checking(&mut self, mat: &[Vec<String>]) -> Result<(), String> {
+    fn ensure_sentinel_values(&mut self) {
         if self.num_chunks == 0 {
             if !self.val_map_str.contains_key("no data") {
                 let id = self.k;
@@ -222,36 +167,95 @@ impl PairAggregator {
                 self.k += 1;
             }
         }
-        for &col in &self.cols {
-            let mut uniq: Vec<String> = mat.iter().map(|row| row[col].clone()).collect();
-            uniq.sort();
-            uniq.dedup();
-            for val in uniq {
-                if let Entry::Vacant(e) = self.val_map_str.entry(val.clone()) {
-                    let id = self.k;
-                    self.val_map_int.insert(id, val.clone());
-                    e.insert(id);
-                    self.k += 1;
-                }
+    }
+
+    fn column_vec_to_labels(col: &ColumnVec) -> Result<Vec<String>, String> {
+        match col {
+            ColumnVec::Utf8(v) => Ok(v
+                .iter()
+                .map(|s| {
+                    let t = s.as_str();
+                    if t.is_empty() {
+                        "no data".to_string()
+                    } else {
+                        t.to_string()
+                    }
+                })
+                .collect()),
+            ColumnVec::F32(v) => Ok(v
+                .iter()
+                .map(|&x| {
+                    if x.is_finite() {
+                        x.to_string()
+                    } else {
+                        "0".to_string()
+                    }
+                })
+                .collect()),
+            ColumnVec::F32Array(v) => Ok(v
+                .iter()
+                .map(|&x| {
+                    if x.is_finite() {
+                        x.to_string()
+                    } else {
+                        "0".to_string()
+                    }
+                })
+                .collect()),
+        }
+    }
+
+    fn register_column_values(&mut self, labels: &[String]) -> Result<(), String> {
+        self.ensure_sentinel_values();
+        let mut uniq: Vec<&String> = labels.iter().collect();
+        uniq.sort();
+        uniq.dedup();
+        for val in uniq {
+            if let Entry::Vacant(e) = self.val_map_str.entry(val.clone()) {
+                let id = self.k;
+                self.val_map_int.insert(id, val.clone());
+                e.insert(id);
+                self.k += 1;
             }
         }
         Ok(())
     }
 
-    fn x_to_vec_mapped(&self, mat: &[Vec<String>]) -> Result<HashMap<usize, Array1<i32>>, String> {
-        let n = mat.len();
+    fn column_to_ids(&self, labels: &[String]) -> Result<Array1<i32>, String> {
+        let mut v = Vec::with_capacity(labels.len());
+        for val in labels {
+            let id = self
+                .val_map_str
+                .get(val)
+                .copied()
+                .ok_or_else(|| format!("unknown val {val}"))?;
+            v.push(id);
+        }
+        Ok(Array1::from(v))
+    }
+
+    fn x_processed_to_mapped(
+        &mut self,
+        x: &HashMap<String, ColumnVec>,
+    ) -> Result<HashMap<usize, Array1<i32>>, String> {
+        let n = x
+            .get(&self.col_graph_names[0])
+            .map(|c| c.len())
+            .ok_or_else(|| "missing first col".to_string())?;
+        let col_indices: Vec<usize> = self.cols.clone();
         let mut out: HashMap<usize, Array1<i32>> = HashMap::new();
-        for &col in &self.cols {
-            let mut v = Vec::with_capacity(n);
-            for row in mat.iter().take(n) {
-                let id = self
-                    .val_map_str
-                    .get(&row[col])
-                    .copied()
-                    .ok_or_else(|| format!("unknown val {}", row[col]))?;
-                v.push(id);
+        for col_idx in col_indices {
+            let name = self.col_graph_names[col_idx].clone();
+            let col = x
+                .get(&name)
+                .ok_or_else(|| format!("missing col {name}"))?;
+            let labels = Self::column_vec_to_labels(col)?;
+            if labels.len() != n {
+                return Err("column length mismatch in x_processed_to_mapped".into());
             }
-            out.insert(col, Array1::from(v));
+            self.register_column_values(&labels)?;
+            let ids = self.column_to_ids(&labels)?;
+            out.insert(col_idx, ids);
         }
         Ok(out)
     }
@@ -261,9 +265,7 @@ impl PairAggregator {
         x_processed: &HashMap<String, ColumnVec>,
         outcomes: &OutcomesRef<'_>,
     ) -> Result<(), String> {
-        let mat = self.convert_ff_to_string_matrix(x_processed)?;
-        self.val_checking(&mat)?;
-        let x_mapped = self.x_to_vec_mapped(&mat)?;
+        let x_mapped = self.x_processed_to_mapped(x_processed)?;
 
         self.avg_outcome_sum += outcomes.sum();
         self.avg_count += outcomes.len() as u64;
@@ -327,13 +329,13 @@ impl PairAggregator {
         &mut self,
         x_processed: &HashMap<String, ColumnVec>,
     ) -> Result<Array2<f32>, String> {
-        let mat = self.convert_ff_to_string_matrix(x_processed)?;
-        let n = mat.len();
+        let x_mapped = self.x_processed_to_mapped(x_processed)?;
+        let n = x_mapped
+            .get(&self.cols[0])
+            .map(|a| a.len())
+            .ok_or_else(|| "no active columns".to_string())?;
         let m = self.col_array.len();
         let mut col_vals = Array2::<f32>::zeros((n, m));
-
-        self.val_checking(&mat)?;
-        let x_mapped = self.x_to_vec_mapped(&mat)?;
 
         for (mi, &combo_id) in self.col_array.iter().enumerate() {
             let &(c1, c2) = self.tup_combos.get(&combo_id).unwrap();
@@ -350,27 +352,23 @@ impl PairAggregator {
 
     pub fn use_map(
         &mut self,
-        x_processed: &HashMap<String, ColumnVec>,
-        y: &[f32],
-        outcomes: &[f32],
+        mut x_processed: HashMap<String, ColumnVec>,
+        y: Vec<f32>,
+        outcomes: Vec<f32>,
     ) -> Result<HashMap<String, ColumnVec>, String> {
-        let col_vals_outcomes = self.make_cvto_inner(x_processed)?;
+        let col_vals_outcomes = self.make_cvto_inner(&x_processed)?;
         let n = col_vals_outcomes.nrows();
 
         let mut col_combined: HashMap<usize, Array1<f32>> = HashMap::new();
-        for &c in &self.col_array {
-            let combo = self.tup_combos[&c];
-            let c1 = combo.0;
-            let c2 = combo.1;
-            let col_vec = col_vals_outcomes.column(c).to_owned();
-            col_combined
-                .entry(c1)
-                .and_modify(|e| *e += &col_vec)
-                .or_insert_with(|| col_vec.clone());
-            col_combined
-                .entry(c2)
-                .and_modify(|e| *e += &col_vec)
-                .or_insert(col_vec);
+        for &combo_id in &self.col_array {
+            let &(c1, c2) = self.tup_combos.get(&combo_id).unwrap();
+            let col_view = col_vals_outcomes.column(combo_id);
+            for &col_idx in &[c1, c2] {
+                col_combined
+                    .entry(col_idx)
+                    .or_insert_with(|| Array1::zeros(n))
+                    .scaled_add(1.0, &col_view);
+            }
         }
         let m = self.m_divisor.max(1.0);
         for v in col_combined.values_mut() {
@@ -379,19 +377,18 @@ impl PairAggregator {
 
         let mut nnm: HashMap<String, ColumnVec> = HashMap::new();
         for name in &self.col_graph_names {
-            let colvec = x_processed
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| ColumnVec::Utf8(vec!["no data".into(); n]));
+            let colvec = x_processed.remove(name).unwrap_or_else(|| {
+                ColumnVec::Utf8(vec!["no data".into(); n])
+            });
             nnm.insert(name.clone(), colvec);
         }
 
+        let ctx = EffectContext {
+            global_mean_outcome: self.avg_outcome,
+        };
         for c_idx in 0..self.col_graph_names.len() {
             if let Some(arr) = col_combined.get(&c_idx) {
-                let col_name = self.col_graph_names[c_idx].clone();
-                let ctx = EffectContext {
-                    global_mean_outcome: self.avg_outcome,
-                };
+                let col_name = &self.col_graph_names[c_idx];
                 let diffs = Array1::from(
                     arr.iter()
                         .map(|x| self.activation.effect.activate(*x, &ctx))
@@ -401,10 +398,10 @@ impl PairAggregator {
             }
         }
 
-        nnm.insert("Actuals".into(), ColumnVec::F32Array(Array1::from(y.to_vec())));
+        nnm.insert("Actuals".into(), ColumnVec::F32Array(Array1::from(y)));
         nnm.insert(
             "outcomes_effect".into(),
-            ColumnVec::F32Array(Array1::from(outcomes.to_vec())),
+            ColumnVec::F32Array(Array1::from(outcomes)),
         );
         Ok(nnm)
     }

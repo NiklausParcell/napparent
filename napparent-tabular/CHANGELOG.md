@@ -1,5 +1,14 @@
 # Changelog
 
+# 0.5.0
+
+- Add `TransformLimits` on `TransformConfig` for fail-fast caps (`max_rows`, `max_active_columns`, `max_col_pairs`, `max_vals_map_keys`)
+- Add `transform_record_batches_chunked` — returns `Vec<RecordBatch>` without a final concat (lower peak RAM)
+- `transform_record_batches` now delegates to chunked path + `concat_same_schema` (same behavior as before)
+- Aggregator: column-wise i32 interning replaces per-batch `Vec<Vec<String>>` matrix (pass 2/3 memory + CPU)
+- `use_map` moves columns into output instead of cloning; in-place ndarray combine for effect columns
+- Python: `transform_record_batches_chunked`, `concat=False` kwarg; smoke script `--no-concat`
+
 # 0.4.1
 
 - Add opt-in pipeline progress logging via `TransformConfig::verbose` (writes to stderr)

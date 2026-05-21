@@ -73,6 +73,15 @@ pub struct ActivationConfig {
     pub effect: EffectActivation,
 }
 
+/// Optional fail-fast caps for large or wide transforms (all `None` = no limits).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TransformLimits {
+    pub max_rows: Option<usize>,
+    pub max_active_columns: Option<usize>,
+    pub max_col_pairs: Option<usize>,
+    pub max_vals_map_keys: Option<usize>,
+}
+
 /// Full configuration for [`crate::pipeline::transform_record_batches`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransformConfig {
@@ -80,6 +89,7 @@ pub struct TransformConfig {
     pub activation: ActivationConfig,
     /// When true, pipeline progress is written to stderr.
     pub verbose: bool,
+    pub limits: TransformLimits,
 }
 
 impl TransformConfig {
@@ -88,6 +98,7 @@ impl TransformConfig {
             bin_depth,
             activation: ActivationConfig::default(),
             verbose: false,
+            limits: TransformLimits::default(),
         }
     }
 
@@ -98,6 +109,11 @@ impl TransformConfig {
 
     pub fn with_verbose(mut self, verbose: bool) -> Self {
         self.verbose = verbose;
+        self
+    }
+
+    pub fn with_limits(mut self, limits: TransformLimits) -> Self {
+        self.limits = limits;
         self
     }
 }

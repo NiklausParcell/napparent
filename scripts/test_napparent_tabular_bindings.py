@@ -53,6 +53,11 @@ def main() -> int:
         default=True,
         help="Print pipeline progress to stderr during transform (default: true).",
     )
+    parser.add_argument(
+        "--no-concat",
+        action="store_true",
+        help="Return list of output batches (no final concat; lower peak RAM on large data).",
+    )
     args = parser.parse_args()
 
     try:
@@ -119,13 +124,21 @@ def main() -> int:
         main_depth,
         per_column=None,
         verbose=args.verbose,
+        concat=not args.no_concat,
     )
 
     print(f"Input rows: {table.num_rows}, batches: {len(batches)}")
-    print(f"Output RecordBatch: {out.num_rows} rows × {out.num_columns} columns")
-    print("Schema:")
-    print(out.schema)
-    print("\nFirst 3 column names:", [out.schema.field(i).name for i in range(min(3, out.num_columns))])
+    if args.no_concat:
+        total_rows = sum(b.num_rows for b in out)
+        print(f"Output: {len(out)} RecordBatches, {total_rows} total rows × {out[0].num_columns} columns")
+        print("Schema (first batch):")
+        print(out[0].schema)
+        print("\nFirst 3 column names:", [out[0].schema.field(i).name for i in range(min(3, out[0].num_columns))])
+    else:
+        print(f"Output RecordBatch: {out.num_rows} rows × {out.num_columns} columns")
+        print("Schema:")
+        print(out.schema)
+        print("\nFirst 3 column names:", [out.schema.field(i).name for i in range(min(3, out.num_columns))])
     return 0
 
 

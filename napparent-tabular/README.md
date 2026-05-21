@@ -4,8 +4,10 @@
 
 ## Status
 
-**0.4.1 — early release.** The API may change. The supported entry point is
+**0.5.0 — early release.** The API may change. The supported entry point is
 `transform_record_batches` with a [`TransformConfig`](https://docs.rs/napparent-tabular).
+For large datasets, prefer [`transform_record_batches_chunked`](https://docs.rs/napparent-tabular)
+to avoid holding a second full copy at concat time.
 Lower-level types (`PairAggregator`, `PreprocessStream`) are exposed but unstable.
 Output feature columns use an `_effect` suffix; outcomes are in `outcomes_effect`.
 
@@ -35,6 +37,23 @@ let out = transform_record_batches(&batches, "target_col", &cols_to_drop, &confi
 
 Output includes original columns, `{column}_effect` features, `Actuals`, and
 `outcomes_effect`.
+
+### Large data (lower peak RAM)
+
+```rust
+use napparent_tabular::{BinDepth, TransformConfig, TransformLimits, transform_record_batches_chunked};
+
+let config = TransformConfig::new(BinDepth::new(8)).with_limits(TransformLimits {
+    max_rows: Some(1_000_000),
+    max_active_columns: Some(100),
+    ..TransformLimits::default()
+});
+let batches_out = transform_record_batches_chunked(&batches, "target_col", &cols_to_drop, &config)?;
+// one output RecordBatch per input batch — no mega-concat
+```
+
+`transform_record_batches` still concatenates for convenience; use chunked output when
+row count × column count is large.
 
 ## Arrow / ndarray bridge
 
@@ -78,6 +97,10 @@ out = napparent_tabular.transform_record_batches(
     kg_activation="log_frequency_weighted_mean",
     effect_activation="global_mean_contrast",
     verbose=True,
+)
+# lower peak RAM: concat=False or transform_record_batches_chunked(...)
+chunks = napparent_tabular.transform_record_batches(
+    batches, target, cols_to_drop, main_depth, concat=False,
 )
 ```
 
