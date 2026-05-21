@@ -3,14 +3,14 @@ requires = ["maturin>=1.7,<2"]
 build-backend = "maturin"
 
 [project]
-name = "nnm-tabular"
+name = "napparent-tabular"
 version = "0.1.0"
-description = "NNM tabular + Psychic Barnacle (Rust, pyarrow)"
+description = "napparent tabular pipeline — make model features apparent (Rust, pyarrow)"
 requires-python = ">=3.10"
 dependencies = ["pyarrow>=15"]
 
 [tool.maturin]
-manifest-path = "nnm-tabular-py/Cargo.toml"
+manifest-path = "napparent-tabular-py/Cargo.toml"
 python-source = "python"
 features = ["pyo3/extension-module"]
-module-name = "nnm_tabular._nnm_tabular"
+module-name = "napparent_tabular._napparent_tabular"

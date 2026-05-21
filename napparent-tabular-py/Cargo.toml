@@ -1,0 +1,16 @@
+[package]
+name = "napparent-tabular-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Python bindings for napparent-tabular (pyarrow)"
+
+[lib]
+name = "_napparent_tabular"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+napparent-tabular = { path = "../napparent-tabular" }
+arrow = { version = "58", default-features = true }
+arrow-pyarrow = "58"
+pyo3 = { version = "0.28", features = ["extension-module", "abi3-py310"] }

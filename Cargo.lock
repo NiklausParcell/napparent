@@ -673,6 +673,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
+name = "napparent-tabular"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "ndarray",
+ "parquet",
+ "tokio",
+]
+
+[[package]]
+name = "napparent-tabular-py"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "arrow-pyarrow",
+ "napparent-tabular",
+ "pyo3",
+]
+
+[[package]]
 name = "ndarray"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -685,26 +705,6 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "rawpointer",
-]
-
-[[package]]
-name = "nnm-tabular-core"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "ndarray",
- "parquet",
- "tokio",
-]
-
-[[package]]
-name = "nnm-tabular-py"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "arrow-pyarrow",
- "nnm-tabular-core",
- "pyo3",
 ]
 
 [[package]]

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: fmt
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy -p napparent-tabular --all-targets -- -D warnings
+      - name: test
+        run: cargo test -p napparent-tabular
+      - name: doc
+        run: cargo doc --no-deps -p napparent-tabular
+
+  python-bindings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install maturin and pyarrow
+        run: pip install maturin pyarrow
+      - name: Build extension
+        run: maturin develop
+      - name: Smoke test
+        run: python scripts/test_napparent_tabular_bindings.py --csv tests/fixtures/smoke.csv --limit 500
