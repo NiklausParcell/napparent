@@ -1,0 +1,128 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{Lundberg2017}
+\citation{Breiman2001}
+\citation{Ribeiro2016}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\citation{Chen2016}
+\citation{Breiman2001}
+\citation{Lundberg2017}
+\citation{Ribeiro2016}
+\citation{Gama2014}
+\citation{Bifet2018}
+\citation{Gama2014}
+\@writefile{toc}{\contentsline {paragraph}{Two-phase structure.}{2}{section*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Parametric-optional outcome.}{2}{section*.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Streaming scalability.}{2}{section*.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Preliminaries and notation}{2}{section.2}\protected@file@percent }
+\newlabel{sec:prelim}{{2}{2}{Preliminaries and notation}{section.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{Dataset.}{2}{section*.5}\protected@file@percent }
+\newlabel{def:outcome}{{1}{2}{Outcome}{definition.1}{}}
+\@writefile{toc}{\contentsline {paragraph}{Column pair set.}{3}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Phase 1: Discretization}{3}{section.3}\protected@file@percent }
+\newlabel{sec:discretize}{{3}{3}{Phase 1: Discretization}{section.3}{}}
+\newlabel{def:bin-schema}{{2}{3}{Bin schema}{definition.2}{}}
+\newlabel{eq:si-rounding}{{1}{3}{Phase 1: Discretization}{equation.3.1}{}}
+\@writefile{toc}{\contentsline {paragraph}{Missing inputs before binning.}{3}{section*.7}\protected@file@percent }
+\newlabel{def:vocab}{{3}{3}{Bin-label vocabulary}{definition.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Numerical bin schema with $B=4$ bins. The top-4 most frequent rounded values are the boundary candidates (darker bars); the largest is replaced by the observed column maximum, leaving three interior split points $b_1,b_2,b_3$ (dashed lines) and yielding $B=4$ bins.}}{4}{figure.1}\protected@file@percent }
+\newlabel{fig:num-bins}{{1}{4}{Numerical bin schema with $B=4$ bins. The top-4 most frequent rounded values are the boundary candidates (darker bars); the largest is replaced by the observed column maximum, leaving three interior split points $b_1,b_2,b_3$ (dashed lines) and yielding $B=4$ bins}{figure.1}{}}
+\newlabel{rem:col-specific}{{1}{4}{Column-specific labels}{remark.1}{}}
+\newlabel{rem:stream-phase1}{{2}{4}{Streaming compatibility of Phase~1}{remark.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Phase 2: Pairwise accumulation and graph construction}{4}{section.4}\protected@file@percent }
+\newlabel{sec:accumulate}{{4}{4}{Phase 2: Pairwise accumulation and graph construction}{section.4}{}}
+\newlabel{sec:graph}{{4}{4}{Phase 2: Pairwise accumulation and graph construction}{section.4}{}}
+\newlabel{def:value-pair}{{4}{4}{Value pair}{definition.4}{}}
+\newlabel{def:accumulator}{{5}{4}{Streaming accumulator}{definition.5}{}}
+\newlabel{eq:W-update}{{2}{4}{Streaming accumulator}{equation.4.2}{}}
+\newlabel{eq:C-update}{{3}{4}{Streaming accumulator}{equation.4.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Categorical bin schema with $B=4$. The four most frequent categories (\texttt  {A}--\texttt  {D}) are retained; the remaining three fall below the frequency threshold and are mapped to the distinguished token $\varepsilon $.}}{5}{figure.2}\protected@file@percent }
+\newlabel{fig:cat-bins}{{2}{5}{Categorical bin schema with $B=4$. The four most frequent categories (\texttt {A}--\texttt {D}) are retained; the remaining three fall below the frequency threshold and are mapped to the distinguished token $\varepsilon $}{figure.2}{}}
+\newlabel{rem:incremental}{{3}{5}{Additive accumulation}{remark.3}{}}
+\newlabel{def:graph}{{6}{5}{Interaction graph}{definition.6}{}}
+\newlabel{eq:Phi}{{4}{5}{Interaction graph}{equation.4.4}{}}
+\newlabel{rem:symmetry}{{4}{5}{Undirected edges}{remark.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Inference: attribution from the interaction graph}{6}{section.5}\protected@file@percent }
+\newlabel{sec:attribution}{{5}{6}{Inference: attribution from the interaction graph}{section.5}{}}
+\newlabel{def:pairwise-score}{{7}{6}{Per-sample pairwise score}{definition.7}{}}
+\newlabel{eq:psi}{{5}{6}{Per-sample pairwise score}{equation.5.5}{}}
+\newlabel{def:col-attr}{{8}{6}{Column attribution score $A_c^{(n)}$}{definition.8}{}}
+\newlabel{eq:col-attr}{{6}{6}{Column attribution score $A_c^{(n)}$}{equation.5.6}{}}
+\newlabel{rem:shared-edges}{{5}{6}{Shared pairwise edges}{remark.5}{}}
+\newlabel{def:delta}{{9}{6}{Barn attribution}{definition.9}{}}
+\newlabel{eq:delta}{{7}{6}{Barn attribution}{equation.5.7}{}}
+\newlabel{rem:no-efficiency}{{6}{6}{No efficiency axiom}{remark.6}{}}
+\newlabel{def:global}{{10}{6}{Global feature importance}{definition.10}{}}
+\newlabel{eq:global}{{8}{6}{Global feature importance}{equation.5.8}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Properties}{7}{section.6}\protected@file@percent }
+\newlabel{sec:props}{{6}{7}{Properties}{section.6}{}}
+\newlabel{prop:chunk-additive}{{7}{7}{Chunk-additive accumulation}{remark.7}{}}
+\newlabel{prop:complexity}{{1}{7}{Complexity}{proposition.1}{}}
+\newlabel{asm:fixed-bins}{{1}{7}{Fixed quantization for asymptotics}{assumption.1}{}}
+\newlabel{prop:convergence}{{2}{7}{Convergence of $\bm {\Phi }$ to scaled conditional expectation}{proposition.2}{}}
+\newlabel{eq:convergence}{{9}{7}{Convergence of $\bm {\Phi }$ to scaled conditional expectation}{equation.6.9}{}}
+\citation{Agresti2013}
+\citation{Manski2003}
+\newlabel{rem:conv-col}{{9}{8}{Column attributions and random support}{remark.9}{}}
+\newlabel{rem:support}{{10}{8}{Support and identifiability}{remark.10}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Implementation}{8}{section.7}\protected@file@percent }
+\newlabel{sec:implementation}{{7}{8}{Implementation}{section.7}{}}
+\@writefile{toc}{\contentsline {paragraph}{Parametric-optional outcome.}{8}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Phase 1: Vocabulary construction.}{9}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Missing values.}{9}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Phase 2: Accumulating co-occurrence statistics.}{9}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Computing $\bm  {\Phi }$.}{9}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Inference.}{9}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Row-level and aggregate use.}{9}{section*.14}\protected@file@percent }
+\citation{Lundberg2017}
+\citation{Ribeiro2016}
+\citation{Friedman2001}
+\citation{Goldstein2015}
+\citation{Agrawal1994}
+\citation{SparckJones1972}
+\citation{Pennington2014}
+\citation{Gama2014}
+\citation{Bifet2018}
+\@writefile{toc}{\contentsline {paragraph}{Memory and chunk size.}{10}{section*.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Related Work}{10}{section.8}\protected@file@percent }
+\newlabel{sec:related}{{8}{10}{Related Work}{section.8}{}}
+\@writefile{toc}{\contentsline {paragraph}{AI Explainability.}{10}{section*.16}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Association rule mining.}{10}{section*.17}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Streaming.}{10}{section*.18}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9}Discussion}{10}{section.9}\protected@file@percent }
+\newlabel{sec:discussion}{{9}{10}{Discussion}{section.9}{}}
+\@writefile{toc}{\contentsline {paragraph}{Parametric-optional design.}{10}{section*.19}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Chunking and stationary extensions.}{10}{section*.20}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Correlated features.}{10}{section*.21}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Domain applicability.}{11}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Speculative / heuristic: parametric gap graph.}{11}{section*.23}\protected@file@percent }
+\newlabel{eq:gap}{{10}{11}{Speculative / heuristic: parametric gap graph}{equation.9.10}{}}
+\@writefile{toc}{\contentsline {paragraph}{Further extensions.}{11}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10}Conclusion}{11}{section.10}\protected@file@percent }
+\bibcite{Agresti2013}{1}
+\bibcite{Agrawal1994}{2}
+\bibcite{SparckJones1972}{3}
+\bibcite{Pennington2014}{4}
+\bibcite{Goldstein2015}{5}
+\bibcite{Manski2003}{6}
+\bibcite{Lundberg2017}{7}
+\bibcite{Ribeiro2016}{8}
+\bibcite{Breiman2001}{9}
+\bibcite{Chen2016}{10}
+\bibcite{Friedman2001}{11}
+\bibcite{Gama2014}{12}
+\bibcite{Bifet2018}{13}
+\gdef \@abspage@last{12}

@@ -1,0 +1,145 @@
+% Symbol reference for The Barn Effect (barn_effect.tex)
+% Build: pdflatex barn_effect_symbols.tex
+\documentclass[10pt]{article}
+
+\usepackage{amsmath,amssymb,bm,mathtools}
+\usepackage[margin=0.85in]{geometry}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue}
+
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\title{Symbol Reference: The Barn Effect}
+\author{Niklaus Parcell}
+\date{}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+\begin{center}
+\small
+\begin{longtable}{@{} L{1.6cm} L{3.2cm} L{5.8cm} L{3.8cm} @{}}
+\toprule
+\textbf{Symbol} & \textbf{Name} & \textbf{Role / meaning} & \textbf{Algorithm phase(s)} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Symbol} & \textbf{Name} & \textbf{Role / meaning} & \textbf{Algorithm phase(s)} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+
+\multicolumn{4}{@{}l}{\textit{Dataset and setup}} \\[2pt]
+
+$N$ & Sample count & Total number of training samples. & Both phases; inference \\[4pt]
+
+$p$ & Feature count & Number of columns ($p \ge 2$). & Both phases; inference \\[4pt]
+
+$[n]$ & Integer range & $\{1,\ldots,n\}$; used to index features, samples, labels. & Notation throughout \\[4pt]
+
+$\mathcal{D}$ & Dataset & Full collection $\{(\bm{x}^{(n)}, Y^{(n)})\}_{n=1}^{N}$. & Phase 2 \\[4pt]
+
+$\bm{x}^{(n)}$ & Feature vector & Row $n$ of the dataset; $\bm{x}^{(n)} \in \mathbb{R}^p$. & Phase 2 \\[4pt]
+
+$X_i^{(n)}$ & Feature value & Value of feature $i$ at sample $n$. & Phases 1 \& 2 \\[4pt]
+
+$Y^{(n)}$ & Outcome & Scalar target for sample $n$; may be a raw label or any model's scalar output. & Phase 2; inference \\[4pt]
+
+$\bar{Y}$ & Outcome mean & Global mean $N^{-1}\sum_n Y^{(n)}$; serves as the attribution baseline. & Inference \\[4pt]
+
+\midrule
+\multicolumn{4}{@{}l}{\textit{Chunking}} \\[2pt]
+
+$K$ & Chunk count & Number of contiguous data chunks; $\sum_k n_k = N$. & Phase 2 \\[4pt]
+
+$\mathcal{D}_k$ & Chunk $k$ & The $k$-th subset of $\mathcal{D}$. & Phase 2 \\[4pt]
+
+$n_k$ & Chunk size & $|\mathcal{D}_k|$. & Phase 2 \\[4pt]
+
+\midrule
+\multicolumn{4}{@{}l}{\textit{Discretization — Phase 1}} \\[2pt]
+
+$B_i$ & Bin depth & Number of interior boundaries for column $i$; controls bin schema granularity. & Phase 1 \\[4pt]
+
+$b_k^{(i)}$ & Bin boundary & $k$-th sorted boundary value for numerical column $i$; $b_0^{(i)}$ = min, $b_{B_i+1}^{(i)}$ = max. & Phase 1 \\[4pt]
+
+$\mathcal{F}_i$ & Frequent categories & Top-$B_i$ most frequent distinct values of categorical column $i$. & Phase 1 \\[4pt]
+
+$\varepsilon$ & Rare-value token & Distinguished label assigned to categories not in $\mathcal{F}_i$. & Phase 1 \\[4pt]
+
+$\mathcal{L}_i$ & Label set & Finite set of bin labels produced by the bin schema for column $i$. & Phase 1 \\[4pt]
+
+$\ell^{(i)}$ & Label function & Map $\ell^{(i)} : \mathrm{dom}(X_i) \to \mathcal{L}_i$ assigning each value its bin label. & Phase 1; inference \\[4pt]
+
+$\mathcal{B}$ & Bin schema & Collection $\{(\mathcal{L}_i, \ell^{(i)})\}_{i=1}^{p}$; the full discretization specification. & Phase 1 \\[4pt]
+
+$\mathcal{V}$ & Vocabulary & $\bigcup_{i=1}^{p} \mathcal{L}_i$; the set of all bin labels across all columns. & Phases 1 \& 2; inference \\[4pt]
+
+$V$ & Vocabulary size & $|\mathcal{V}|$; dimension of the square accumulator and interaction graph matrices. & Phases 1 \& 2; inference \\[4pt]
+
+\midrule
+\multicolumn{4}{@{}l}{\textit{Pairwise accumulation — Phase 2}} \\[2pt]
+
+$\mathcal{C}$ & Column pair set & $\{(i,j) : 1 \le i < j \le p\}$; $|\mathcal{C}| = p(p-1)/2$. & Phase 2 \\[4pt]
+
+$(u,v)$ & Value pair & Encoded label pair $(\ell^{(i)}(X_i^{(n)}),\, \ell^{(j)}(X_j^{(n)})) \in [V]^2$. & Phase 2 \\[4pt]
+
+$\alpha$ & Threshold rate & Configurable significance rate in $[0,1)$; default $\alpha = 0.01$. & Phase 2 \\[4pt]
+
+$\theta_k$ & Significance threshold & $\lfloor \alpha \cdot n_k \rfloor$; minimum per-chunk occurrence count for a value pair to enter the accumulator. & Phase 2 \\[4pt]
+
+$\bm{W}$ & Sum accumulator & Sparse matrix $\bm{W} \in \mathbb{R}^{V \times V}$; $W_{uv}$ accumulates the sum of $Y^{(n)}$ over co-occurrences of $(u,v)$. Symmetric by construction. & Phase 2 \\[4pt]
+
+$\bm{C}$ & Count accumulator & Sparse matrix $\bm{C} \in \mathbb{R}^{V \times V}$; $C_{uv}$ accumulates the number of co-occurrences of $(u,v)$. Symmetric by construction. & Phase 2 \\[4pt]
+
+$\bm{\Phi}$ & Interaction matrix & Sparse symmetric matrix $\bm{\Phi} \in \mathbb{R}^{V \times V}$; $\Phi_{uv} = (W_{uv}/C_{uv})\cdot\log_{10}(C_{uv})$ on the support $C_{uv} > 1$, zero otherwise. The trained model artifact. & Phase 2; inference \\[4pt]
+
+$\Phi_{uv}$ & Edge weight & Log-frequency-weighted conditional mean of $Y$ given that bin $u$ and bin $v$ co-occurred in the same row. Entry $(u,v)$ of $\bm{\Phi}$; weight of edge $(u,v)$ in $G_\Phi$. & Phase 2; inference \\[4pt]
+
+$G_\Phi$ & Interaction graph & Weighted undirected graph $(\mathcal{V}, E_\Phi, w_\Phi)$ with vertex set $\mathcal{V}=[V]$, edge set $E_\Phi = \{(u,v):\Phi_{uv}\neq 0\}$, and $w_\Phi(u,v)=\Phi_{uv}$. $\bm{\Phi}$ is its weighted adjacency matrix. & Phase 2; inference \\[4pt]
+
+\midrule
+\multicolumn{4}{@{}l}{\textit{Inference and attribution}} \\[2pt]
+
+$\psi_{ij}^{(n)}$ & Pairwise score & $\Phi_{\ell^{(i)}(X_i^{(n)}),\,\ell^{(j)}(X_j^{(n)})}$; single edge lookup in $\bm{\Phi}$ for column pair $(i,j)$ at sample $n$. & Inference \\[4pt]
+
+$d_c^{(n)}$ & Active pair count & Number of column partners $j \neq c$ with a nonzero pairwise score for column $c$ at sample $n$; used as the normalization denominator. & Inference \\[4pt]
+
+$A_c^{(n)}$ & Column attribution score & Mean pairwise score for column $c$ at sample $n$ over its $d_c^{(n)}$ nonzero partners: $d_c^{(n)^{-1}}\sum_{j \neq c} \psi_{cj}^{(n)}$. Zero if $d_c^{(n)} = 0$. & Inference \\[4pt]
+
+$\delta_c^{(n)}$ & Barn attribution & $\widetilde{\Phi}_c^{(n)} - \bar{Y}$; deviation of column $c$'s pairwise context from the global baseline for sample $n$. & Inference \\[4pt]
+
+$\bm{\Delta}$ & Attribution matrix & $N \times p$ matrix with $\Delta_{nc} = \delta_c^{(n)}$; full output of inference. & Inference \\[4pt]
+
+$\bar{\delta}_c$ & Global importance & $N^{-1}\sum_n \delta_c^{(n)}$; mean Barn attribution for feature $c$ across all samples; used for dataset-level feature ranking. & Inference \\[4pt]
+
+\midrule
+\multicolumn{4}{@{}l}{\textit{Analysis and extensions}} \\[2pt]
+
+$\pi$ & Pair probability & $P(\ell^{(i)}(X_i)=u,\, \ell^{(j)}(X_j)=v)$; joint probability of a value pair; appears in the convergence result. & Properties \\[4pt]
+
+$\bm{G}$ & Gap graph & $\bm{\Phi}_{\mathrm{data}} - \bm{\Phi}_{\mathrm{model}}$ on shared support; identifies co-occurrences where the model deviates from empirical statistics. Requires both graphs trained on outcomes with the same scale. & Discussion \\[4pt]
+
+$\hat{f}$ & External model & Any trained model whose scalar output $\hat{f}(\bm{x}^{(n)})$ may be used as $Y^{(n)}$ in place of the raw label. & Throughout (parametric-optional) \\[4pt]
+
+$K_m$ & Cluster count & Number of embedding clusters for modality $m$ in the multi-modal extension; plays the role of $B_m$ (bin depth) for embedding-encoded columns. & Multi-modal extension \\[4pt]
+
+$\bm{\mu}_k^{(m)}$ & Cluster centroid & Centroid of cluster $k$ for modality $m$; used to define $\ell^{(m)}$ via nearest-neighbor assignment. & Multi-modal extension \\[4pt]
+
+\midrule
+\multicolumn{4}{@{}l}{\textit{Operators}} \\[2pt]
+
+$\odot$ & Hadamard product & Element-wise matrix multiplication. & Phase 2 \\[4pt]
+
+$\oslash$ & Element-wise division & Element-wise matrix division on the nonzero support. & Phase 2 \\[4pt]
+
+\bottomrule
+\end{longtable}
+\end{center}
+
+\end{document}

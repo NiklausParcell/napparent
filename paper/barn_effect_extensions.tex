@@ -1,0 +1,114 @@
+% Companion to barn_effect.tex: domain and multi-modal extensions.
+% Build: pdflatex barn_effect_extensions.tex
+\documentclass[11pt]{article}
+
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{bm}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+\newtheorem{proposition}{Proposition}
+
+\title{The Barn Effect: Domain and Multi-Modal Extensions}
+\author{Niklaus Parcell\\
+\textit{Mont Ops Inc.\ / Independent Research}\\
+\texttt{nik@mont-ops.com}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This companion note extends the core Barn Effect algorithm (see \texttt{barn\_effect.tex}) to non-tabular domains and multi-modal embedding settings.
+The two-phase structure---discretize, accumulate, attribute---generalizes to any domain by substituting the encoding step; the accumulator, inference, and convergence results carry over unchanged.
+Sections~1--4 cover text, image, retrieval-augmented generation, and multi-modal settings.
+Section~5 treats the multi-modal embedding case in detail, including clustering-based bin schemas and cross-modal gap analysis.
+\end{abstract}
+
+\section{Domain Extensions}
+\label{app:domains}
+
+The Barn Effect is stated for tabular data, where features are independent scalar-valued columns and rows are independent samples.
+The same two-phase structure generalizes to other domains by changing only the encoding step; the accumulator update rules, inference, and the convergence result carry over unchanged.
+
+\subsection{Text / NLP}
+
+Each document $d^{(n)}$ is a sample; its tokens $w_1,\ldots,w_T$ are the features.
+The pairwise structure is \emph{sequential rather than all-pairs}: each token $w_k$ is paired only with its immediate predecessor $w_{k-1}$ and successor $w_{k+1}$, yielding three interaction lookups per token position (standalone, next-bigram, prev-bigram).
+The outcome is parametric: $Y^{(n)}_{w_k} \coloneqq (\hat{f}(d^{(n)}) - \bar{f}) \cdot \mathrm{tfidf}(w_k, d^{(n)})$, where $\hat{f}$ is any scalar model and the TF-IDF weight scales each token's contribution by its relative importance in the document.
+The per-token attribution score averages the three lookups with a global baseline $\bar{f}$; scores above zero indicate association with above-average model predictions and scores below zero indicate the opposite.
+
+\subsection{Image Classification}
+
+Each image $I^{(n)}$ is a sample; each pixel location $(i,j)$ is a feature.
+Pixel intensities are discretized into $R$ equal-width ranges forming the bin vocabulary.
+The pairwise structure is \emph{spatially local}: pixel $(i,j)$ is paired with each of its $8$-connected neighbors $(\Delta x, \Delta y) \in \{-1,0,1\}^2 \setminus \{(0,0)\}$, yielding a 4-dimensional accumulator $\bm{W}[i,j,\mathrm{pos},r]$ indexed by pixel position, neighbor direction, and neighbor intensity range.
+The outcome $Y^{(n)} \in \{0,1\}$ is the binary image label.
+At inference, each pixel's attribution score is the mean of its 8 neighborhood conditional means retrieved from the accumulator, producing a spatial attribution mask.
+
+\subsection{Retrieval-Augmented Generation}
+
+A RAG pipeline maps a user query $q$ through a sentence transformer $\phi$ to produce an embedding $\phi(q)$, then ranks a knowledge base of text chunks $\{d^{(n)}\}_{n=1}^{N}$ by cosine similarity $Y^{(n)} \coloneqq \cos(\phi(q),\,\phi(d^{(n)}))$, returning the top-$k$ chunks as LLM context.
+To apply the Barn Effect, treat each chunk $d^{(n)}$ as a sample: its tokens occupy the feature columns and $Y^{(n)}$ is the similarity score.
+Training $\bm{\Phi}$ on the knowledge base produces token-level Barn attributions $\delta_c^{(n)}$ for every token $c$ in every chunk $n$.
+A positive $\delta_c^{(n)}$ indicates that token $c$'s co-occurrence context is associated with above-average similarity to the query; a negative value indicates below-average contribution.
+
+\subsection{Multi-Modal (Overview)}
+
+Treat modalities as disjoint column groups sharing a vocabulary; column pairs span within-modality and cross-modality combinations, and a single $\bm{\Phi}$ is learned over all pairs jointly.
+The gap-graph construction $\bm{G} = \bm{\Phi}_{\mathrm{data}} - \bm{\Phi}_{\mathrm{model}}$ applies: comparing interaction graphs trained on different signals can reveal cross-modal alignment gaps.
+A detailed treatment of the embedding case is given in Section~\ref{app:multimodal}.
+
+\section{Multi-Modal Embedding Extensions}
+\label{app:multimodal}
+
+The domain extensions above assume that each modality provides scalar or discrete feature values that can be binned directly.
+A more general construction applies when samples are described by dense embeddings from two or more modalities (text encoders, image encoders, structured attribute encoders, sensor embeddings), and the relevant co-occurrence structure lives in the \emph{embedding space} rather than in raw values.
+
+\subsection{Encoding via Cluster Assignment}
+
+Let modality $m \in [M]$ provide an embedding $\bm{e}_m^{(n)} \in \mathbb{R}^{d_m}$ for each sample $n$.
+Train a clustering model (e.g., $k$-means) on the training embeddings for each modality independently, yielding $K_m$ cluster centroids $\{\bm{\mu}_k^{(m)}\}_{k=1}^{K_m}$.
+Define the bin labeling function for modality $m$ as the nearest-centroid assignment:
+\[
+  \ell^{(m)}(\bm{e}_m^{(n)}) \;\coloneqq\; \arg\min_{k \in [K_m]} \bigl\lVert \bm{e}_m^{(n)} - \bm{\mu}_k^{(m)} \bigr\rVert_2.
+\]
+This reduces each modality to a single categorical column with $K_m$ labels.
+The global vocabulary $\mathcal{V}$ is the union of all cluster-index sets; because labels are column-specific, cluster index $k$ in modality $a$ and cluster index $k$ in modality $b$ are distinct integers in $\mathcal{V}$.
+The two-phase algorithm then proceeds without modification: Phase~1 is the clustering step, and Phase~2 accumulates co-occurrence statistics over the encoded cluster labels.
+
+\subsection{Target Options}
+
+Two natural choices for the outcome $Y^{(n)}$ are:
+\begin{itemize}
+  \item \textbf{Similarity target.}
+    Set $Y^{(n)} \coloneqq \cos(\bm{e}_a^{(n)},\, \bm{e}_b^{(n)})$ for a designated pair of modalities $(a,b)$.
+    The interaction graph $\bm{\Phi}$ then encodes which cross-modal cluster combinations co-occur with high cosine similarity, revealing which embedding-space regions of each modality tend to be mutually aligned.
+    $\bar{\delta}_m$ ranks each modality's cluster structure by its contribution to cross-modal alignment; $\delta_m^{(n)}$ identifies per-sample alignment anomalies.
+  \item \textbf{Labeled target.}
+    Set $Y^{(n)} \in \{0,1\}$ or $Y^{(n)} \in \mathbb{R}$ to a ground-truth task label or score.
+    The interaction graph then encodes which cross-modal cluster co-occurrences predict the label.
+    Appropriate for multi-modal classification tasks (visual question answering, audio-visual sentiment, medical image + clinical notes) where a supervised signal is available.
+\end{itemize}
+
+\subsection{Interpretation}
+
+An entry $\Phi_{u,v}$ where $u \in [K_a]$ is a cluster of modality $a$ and $v \in [K_b]$ is a cluster of modality $b$ gives the log-frequency-weighted conditional mean of $Y^{(n)}$ over all samples whose modality-$a$ embedding falls in cluster $u$ and modality-$b$ embedding falls in cluster $v$.
+The attribution $\delta_m^{(n)}$ measures how much that sample's cluster context deviates from the global mean target, aggregated over all cross-modal and within-modal pairs involving modality $m$.
+
+\begin{remark}[Cluster granularity tradeoff]
+Increasing $K_m$ produces finer-grained bin labels at the cost of sparser $\bm{\Phi}$ (fewer samples per cluster pair).
+Decreasing $K_m$ yields denser accumulation but coarser embedding-space regions.
+The significance threshold naturally suppresses cluster pairs that co-occur too rarely for reliable estimation, providing an automatic quality floor without requiring $K_m$ to be tuned independently.
+\end{remark}
+
+\begin{remark}[Cross-modal gap analysis]
+Train $\bm{\Phi}_{\mathrm{sim}}$ with a similarity target and $\bm{\Phi}_{\mathrm{label}}$ with a ground-truth label on the same dataset and cluster schema.
+The element-wise difference $\bm{G} = \bm{\Phi}_{\mathrm{sim}} - \bm{\Phi}_{\mathrm{label}}$ identifies cross-modal cluster combinations where embedding alignment and task-relevant signal diverge: large positive $G_{uv}$ means clusters align well in embedding space but do not predict the label; large negative $G_{uv}$ means label predictability without geometric alignment.
+This serves as a targeted diagnostic for multi-modal retrieval and classification pipelines.
+\end{remark}
+
+\end{document}
