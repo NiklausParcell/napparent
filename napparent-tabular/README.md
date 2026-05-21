@@ -4,7 +4,7 @@
 
 ## Status
 
-**0.2.0 — early release.** The API may change. The supported entry point is
+**0.3.0 — early release.** The API may change. The supported entry point is
 `transform_record_batches` with a [`TransformConfig`](https://docs.rs/napparent-tabular).
 Lower-level types (`PairAggregator`, `PreprocessStream`) are exposed but unstable.
 Output feature columns use an `_effect` suffix; outcomes are in `outcomes_effect`.
@@ -46,6 +46,7 @@ KG pair edges and effect columns use pluggable activations (see `activation` mod
 | Effect | `GlobalMeanContrast` | `combined - global_mean_outcome` |
 
 Log-frequency weighting reduces bias from sparse / outlier pair cells in the HashMap KG.
+Value-pair keys are stored in canonical `(min, max)` order so `(u,v)` and `(v,u)` share one bucket.
 More activations (Bayesian, robust contrast, etc.) are planned.
 
 ```rust
@@ -78,6 +79,7 @@ Known differences:
 - Effect columns use a scalar global mean (reference `_barn` used a per-group bug).
 - Effect column order follows column index order, not hash iteration.
 - Output suffix is `_effect` (reference uses `_barn`).
+- Value-pair keys are canonical unordered `(min, max)` (reference keeps directed `(u,v)` and `(v,u)` separately).
 
 ## Roadmap
 

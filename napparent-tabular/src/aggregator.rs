@@ -6,6 +6,15 @@ use ndarray::{Array1, Array2, Axis};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 
+#[inline]
+fn canonical_val_pair(a: i32, b: i32) -> (i32, i32) {
+    if a <= b {
+        (a, b)
+    } else {
+        (b, a)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct PairAggregator {
     pub target: String,
@@ -260,56 +269,25 @@ impl PairAggregator {
                 ndarray::stack(Axis(1), &[a.view(), b.view()]).map_err(|e| e.to_string())?;
             let rows: Vec<[i32; 2]> = stacked.rows().into_iter().map(|r| [r[0], r[1]]).collect();
 
-            let mut freq: HashMap<(i32, i32), usize> = HashMap::new();
-            for r in &rows {
-                let k = (r[0], r[1]);
-                *freq.entry(k).or_insert(0) += 1;
+            let mut local: HashMap<(i32, i32), PairStats> = HashMap::new();
+            for (i, r) in rows.iter().enumerate() {
+                let key = canonical_val_pair(r[0], r[1]);
+                let entry = local.entry(key).or_insert(PairStats {
+                    sum: 0.0,
+                    count: 0.0,
+                });
+                entry.sum += outs[i];
+                entry.count += 1.0;
             }
 
-            let mut frequent: Vec<(i32, i32)> = Vec::new();
-            let mut rare: Vec<(i32, i32)> = Vec::new();
-            for (k, cnt) in freq {
-                if cnt > one_percent {
-                    frequent.push(k);
+            for (key, stats) in local {
+                if stats.count as usize > one_percent {
+                    let entry = self.vals_map.entry(key).or_insert([0.0, 0.0]);
+                    entry[0] += stats.sum;
+                    entry[1] += stats.count;
                 } else {
-                    rare.push(k);
+                    self.vals_map.entry(key).or_insert([0.0, 0.0]);
                 }
-            }
-
-            for (v0, v1) in frequent {
-                let unique_arr = [v0, v1];
-                let unique_inv = [v1, v0];
-                let unique_tup = (v0, v1);
-                let unique_inv_tup = (v1, v0);
-
-                let mut sum_direct = 0.0_f32;
-                let mut sum_inv = 0.0_f32;
-                let mut count_direct = 0_usize;
-                let mut count_inv = 0_usize;
-                for (i, r) in rows.iter().enumerate() {
-                    if *r == unique_arr {
-                        sum_direct += outs[i];
-                        count_direct += 1;
-                    }
-                    if *r == unique_inv {
-                        sum_inv += outs[i];
-                        count_inv += 1;
-                    }
-                }
-
-                let n_f = count_direct as f32;
-                let n_inv = count_inv as f32;
-                self.vals_map.entry(unique_tup).or_insert([0.0, 0.0])[0] += sum_direct;
-                self.vals_map.entry(unique_inv_tup).or_insert([0.0, 0.0])[0] += sum_inv;
-                self.vals_map.entry(unique_tup).or_insert([0.0, 0.0])[1] += n_f;
-                self.vals_map.entry(unique_inv_tup).or_insert([0.0, 0.0])[1] += n_inv;
-            }
-
-            for (v0, v1) in rare {
-                let unique_tup = (v0, v1);
-                let unique_inv_tup = (v1, v0);
-                self.vals_map.entry(unique_tup).or_insert([0.0, 0.0]);
-                self.vals_map.entry(unique_inv_tup).or_insert([0.0, 0.0]);
             }
         }
 
@@ -319,22 +297,12 @@ impl PairAggregator {
 
     pub fn finish_map(&mut self) {
         self.vals_map_avg.clear();
-        let keys: Vec<(i32, i32)> = self.vals_map.keys().copied().collect();
-        for val_tup in keys {
-            let arr = self.vals_map[&val_tup];
-            let div0 = self.activation.kg_pair.activate(PairStats {
+        for (&key, &arr) in &self.vals_map {
+            let weight = self.activation.kg_pair.activate(PairStats {
                 sum: arr[0],
                 count: arr[1],
             });
-            self.vals_map_avg.insert(val_tup, div0);
-
-            let inv = (val_tup.1, val_tup.0);
-            let arr_inv = self.vals_map.get(&inv).copied().unwrap_or([0.0, 0.0]);
-            let div1 = self.activation.kg_pair.activate(PairStats {
-                sum: arr_inv[0],
-                count: arr_inv[1],
-            });
-            self.vals_map_avg.insert(inv, div1);
+            self.vals_map_avg.insert(key, weight);
         }
 
         if self.avg_count > 0 {
@@ -361,7 +329,7 @@ impl PairAggregator {
             let a = x_mapped.get(&c1).unwrap();
             let b = x_mapped.get(&c2).unwrap();
             for i in 0..n {
-                let tup = (a[i], b[i]);
+                let tup = canonical_val_pair(a[i], b[i]);
                 let v = *self.vals_map_avg.get(&tup).unwrap_or(&0.0);
                 col_vals[[i, mi]] = v;
             }
@@ -430,5 +398,73 @@ impl PairAggregator {
 impl Default for PairAggregator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn two_col_aggregator() -> PairAggregator {
+        let cg = ColGraph {
+            names: vec!["a".into(), "b".into()],
+            dropped: HashSet::new(),
+        };
+        let mut agg = PairAggregator::new();
+        agg.initialize_inputs(&cg, "target", &["a".into(), "b".into()])
+            .unwrap();
+        agg.make_col_combos();
+        agg
+    }
+
+    fn oriented_pair_data() -> HashMap<String, ColumnVec> {
+        let mut x = HashMap::new();
+        x.insert("a".into(), ColumnVec::Utf8(vec!["5".into(), "7".into()]));
+        x.insert("b".into(), ColumnVec::Utf8(vec!["7".into(), "5".into()]));
+        x
+    }
+
+    #[test]
+    fn canonical_val_pair_commutes() {
+        assert_eq!(canonical_val_pair(5, 7), canonical_val_pair(7, 5));
+        assert_eq!(canonical_val_pair(5, 7), (5, 7));
+    }
+
+    #[test]
+    fn vals_map_merges_orientations() {
+        let mut agg = two_col_aggregator();
+        let x = oriented_pair_data();
+        agg.vals_map_updating(&x, &[1.0, 2.0]).unwrap();
+
+        let id5 = agg.val_map_str["5"];
+        let id7 = agg.val_map_str["7"];
+        let key = canonical_val_pair(id5, id7);
+
+        assert_eq!(agg.vals_map.len(), 1);
+        let arr = agg.vals_map[&key];
+        assert!((arr[0] - 3.0).abs() < 1e-5);
+        assert!((arr[1] - 2.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn finish_map_no_duplicate_keys() {
+        let mut agg = two_col_aggregator();
+        let x = oriented_pair_data();
+        agg.vals_map_updating(&x, &[1.0, 2.0]).unwrap();
+        agg.finish_map();
+        assert_eq!(agg.vals_map_avg.len(), agg.vals_map.len());
+    }
+
+    #[test]
+    fn lookup_symmetric() {
+        let mut agg = two_col_aggregator();
+        let x = oriented_pair_data();
+        agg.vals_map_updating(&x, &[1.0, 2.0]).unwrap();
+        agg.finish_map();
+
+        let col_vals = agg.make_cvto_inner(&x).unwrap();
+        assert_eq!(col_vals.nrows(), 2);
+        assert!((col_vals[[0, 0]] - col_vals[[1, 0]]).abs() < 1e-5);
     }
 }

@@ -13,7 +13,7 @@
 
 use crate::preprocess::BinDepth;
 
-/// Raw accumulated stats for one directed pair key in `vals_map`.
+/// Raw accumulated stats for one canonical unordered value-pair key in `vals_map`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PairStats {
     pub sum: f32,
