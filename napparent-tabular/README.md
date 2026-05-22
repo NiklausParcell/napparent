@@ -108,14 +108,7 @@ chunks = napparent_tabular.transform_record_batches(
 
 ## Parity
 
-Behavior is validated against `reference/nnm_tabular.py` in this repository.
-Known differences:
-
-- Global mean outcome uses cumulative sum/count across chunks.
-- Effect columns use a scalar global mean (reference `_barn` used a per-group bug).
-- Effect column order follows column index order, not hash iteration.
-- Output suffix is `_effect` (reference uses `_barn`).
-- Python reference keeps directed `(u,v)` keys separately; paper and crate use canonical $\kappa(u,v)$.
+Behavior follows the algorithm in [`paper/`](../paper/) (canonical $\kappa(u,v)$ keys, fixed partner divisor $m_c = p - 1$, per-chunk threshold $\theta_k$).
 
 ## Theory
 

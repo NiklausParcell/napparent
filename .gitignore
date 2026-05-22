@@ -29,6 +29,13 @@ htmlcov/
 # Custom
 data/
 
+# Local-only (not published; keep on disk)
+docs/
+python-narnacle-versions/
+reference/
+paper/barn_effect_extensions.tex
+scripts/run_*.sh
+
 # LaTeX build output (sources stay in paper/)
 paper/**/*.aux
 paper/**/*.out
