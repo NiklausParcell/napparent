@@ -1,5 +1,6 @@
 //! Optional stderr progress reporting for long pipeline runs.
 
+#[cfg(feature = "progress")]
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::io::IsTerminal;
 use std::time::{Duration, Instant};
@@ -13,6 +14,7 @@ pub(crate) enum ProgressDisplay {
 
 pub(crate) struct ProgressReporter {
     mode: ProgressDisplay,
+    #[cfg(feature = "progress")]
     bar: Option<ProgressBar>,
 }
 
@@ -20,17 +22,25 @@ impl ProgressReporter {
     pub fn from_verbose(verbose: bool) -> Self {
         let mode = if !verbose {
             ProgressDisplay::Off
-        } else if std::io::stderr().is_terminal() {
+        } else if std::io::stderr().is_terminal() && cfg!(feature = "progress") {
             ProgressDisplay::Bar
         } else {
             ProgressDisplay::Lines
         };
-        Self { mode, bar: None }
+        Self {
+            mode,
+            #[cfg(feature = "progress")]
+            bar: None,
+        }
     }
 
     #[cfg(test)]
     pub fn from_display(mode: ProgressDisplay) -> Self {
-        Self { mode, bar: None }
+        Self {
+            mode,
+            #[cfg(feature = "progress")]
+            bar: None,
+        }
     }
 
     #[cfg(test)]
@@ -42,13 +52,15 @@ impl ProgressReporter {
         if self.mode == ProgressDisplay::Off {
             return;
         }
+        #[cfg(feature = "progress")]
         if let Some(bar) = &self.bar {
             bar.println(format!("napparent: {msg}"));
-        } else {
-            eprintln!("napparent: {msg}");
+            return;
         }
+        eprintln!("napparent: {msg}");
     }
 
+    #[allow(unused_variables)]
     pub fn pass_start(&mut self, pass: u8, total_passes: u8, label: &str, batch_count: usize) {
         self.finish_bar();
         match self.mode {
@@ -57,25 +69,35 @@ impl ProgressReporter {
                 eprintln!("napparent: pass {pass}/{total_passes}: {label}");
             }
             ProgressDisplay::Bar => {
-                let bar = ProgressBar::new(batch_count as u64);
-                bar.set_draw_target(ProgressDrawTarget::stderr());
-                bar.set_style(
-                    ProgressStyle::with_template(
-                        "napparent pass {prefix:.bold} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}",
-                    )
-                    .expect("progress template")
-                    .progress_chars("█▓░"),
-                );
-                bar.set_prefix(format!("{pass}/{total_passes} {label}"));
-                self.bar = Some(bar);
+                #[cfg(feature = "progress")]
+                {
+                    let bar = ProgressBar::new(batch_count as u64);
+                    bar.set_draw_target(ProgressDrawTarget::stderr());
+                    bar.set_style(
+                        ProgressStyle::with_template(
+                            "napparent pass {prefix:.bold} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}",
+                        )
+                        .expect("progress template")
+                        .progress_chars("█▓░"),
+                    );
+                    bar.set_prefix(format!("{pass}/{total_passes} {label}"));
+                    self.bar = Some(bar);
+                }
+                #[cfg(not(feature = "progress"))]
+                {
+                    eprintln!("napparent: pass {pass}/{total_passes}: {label}");
+                }
             }
         }
     }
 
+    #[allow(unused_variables)]
     pub fn batch_tick(&mut self, index: usize, total: usize, rows: usize, line_msg: &str) {
         match self.mode {
             ProgressDisplay::Off => {}
-            ProgressDisplay::Bar => {
+            ProgressDisplay::Bar =>
+            {
+                #[cfg(feature = "progress")]
                 if let Some(bar) = &self.bar {
                     bar.set_position((index + 1) as u64);
                     bar.set_message(format!("batch {}/{} ({} rows)", index + 1, total, rows));
@@ -104,12 +126,14 @@ impl ProgressReporter {
     }
 
     pub fn abandon(&mut self) {
+        #[cfg(feature = "progress")]
         if let Some(bar) = self.bar.take() {
             bar.abandon_with_message("interrupted");
         }
     }
 
     fn finish_bar(&mut self) {
+        #[cfg(feature = "progress")]
         if let Some(bar) = self.bar.take() {
             bar.finish_and_clear();
         }

@@ -1,6 +1,11 @@
-//! napparent tabular preprocessing (Apache Arrow + ndarray).
+//! Tabular effect features on Apache Arrow batches (Barn Effect algorithm).
 //!
-//! Formal algorithm: see `paper/` in the repository root.
+//! Discretize columns, accumulate pairwise co-occurrence statistics, and produce per-row
+//! `{column}_effect` attributions. See [`transform_record_batches`](crate::pipeline::transform_record_batches)
+//! and [`transform_record_batches_chunked`](crate::pipeline::transform_record_batches_chunked).
+//!
+//! - API docs: <https://docs.rs/napparent-tabular>
+//! - Theory: <https://github.com/NiklausParcell/napparent/tree/main/paper>
 
 mod activation;
 mod aggregator;

@@ -10,7 +10,7 @@ name = "_napparent_tabular"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-napparent-tabular = { path = "../napparent-tabular" }
+napparent-tabular = { path = "../napparent-tabular", features = ["progress"] }
 arrow = { version = "58", default-features = true }
 arrow-pyarrow = "58"
 pyo3 = { version = "0.28", features = ["extension-module", "abi3-py310"] }

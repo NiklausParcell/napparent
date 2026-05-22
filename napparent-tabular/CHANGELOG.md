@@ -1,5 +1,19 @@
 # Changelog
 
+# 0.1.0
+
+First [crates.io](https://crates.io/crates/napparent-tabular) release.
+
+- `transform_record_batches` / `transform_record_batches_chunked` on Apache Arrow `RecordBatch` chunks
+- `TransformConfig`: bin depth, pluggable activations, optional `TransformLimits`, verbose progress
+- Default activations: `LogFrequencyWeightedMean` (KG pairs), `GlobalMeanContrast` (effect columns)
+- Canonical value-pair keys `(min, max)`; output `{col}_effect`, `outcomes_effect`
+- ndarrow zero-copy bridge on numeric Arrow columns; optional `parquet` feature
+- Cooperative cancellation via `CancelToken`; optional `progress` feature for TTY bars and SIGINT helper
+- Lower peak RAM: chunked output path, column-wise i32 interning, in-place effect combine
+
+## Pre-crates.io development history
+
 # 0.6.0
 
 - `verbose=true` shows in-place indicatif progress bars on stderr (batch count + percent per pass)
@@ -37,20 +51,11 @@
 - KG value pairs use canonical unordered keys `(min, max)` in `vals_map` and `vals_map_avg`
 - Fixes double-counting from separate `(u,v)` / `(v,u)` entries and redundant inverse handling in `finish_map`
 - `vals_map_updating` uses a single row pass per column combo (more efficient)
-- **Breaking:** diverges from Python reference directed `vals_map` keys (`unique_tup` / `unique_inv_tup`)
 
 # 0.2.0
 
 - Add pluggable activations: `TransformConfig`, `ActivationConfig`, `KgPairActivation`, `EffectActivation`
 - Default KG activation: `LogFrequencyWeightedMean` — `(sum/count) * log10(count)` for unbiased sparse-pair weighting
 - Default effect activation: `GlobalMeanContrast` — subtract global mean outcome
-- **Breaking:** `transform_record_batches` now takes `&TransformConfig` instead of `&BinDepth`
-  - Migration: `TransformConfig::new(BinDepth::new(n))` replaces passing `&BinDepth` directly
+- `transform_record_batches` takes `&TransformConfig` instead of `&BinDepth`
 - Python: optional `kg_activation` and `effect_activation` keyword arguments (defaults unchanged)
-
-# 0.1.0
-
-- Initial publish as napparent-tabular
-- API: `transform_record_batches`, `BinDepth`, `PairAggregator`
-- Output columns: `{col}_effect`, `outcomes_effect`
-- Optional `parquet` feature
