@@ -547,7 +547,7 @@ Distinguishing causation from correlation in such cases requires additional anal
 The two-phase structure generalizes beyond tabular data by substituting the encoding step while leaving the accumulator, inference, and convergence results unchanged.
 Natural instantiations include sequential token pairs in text, spatially adjacent pixel pairs in images, and cosine similarity scores as outcomes in retrieval settings.
 In each case, Phase~1 reduces the domain to a finite integer vocabulary; Phase~2 and inference then proceed identically to the tabular formulation.
-A detailed treatment of these extensions, including multi-modal embeddings via cluster assignment, appears in the companion note \texttt{barn\_effect\_extensions.tex}.
+A detailed treatment of these extensions, including multi-modal embeddings via cluster assignment, appears in a separate extensions note.
 
 \paragraph{Speculative / heuristic: parametric gap graph.}
 This subsection is \emph{not} an evaluated diagnostic: no calibration, benchmarks, or hypothesis tests are claimed.
@@ -581,7 +581,7 @@ The algorithm requires no model access, no gradient computation, and no backgrou
 The outcome $Y^{(n)}$ is parametric-optional: raw labels produce a data-driven attribution; model outputs produce a model-agnostic explanation.
 The interaction graph $\bm{\Phi}$ is a reusable artifact---trained once, queried arbitrarily many times---whose entries converge almost surely to scaled conditional expectations of the outcome under Assumption~\ref{asm:fixed-bins} (Proposition~\ref{prop:convergence}).
 
-Future directions include controlled empirical benchmarks against SHAP and ICE on standard attribution tasks, theoretical characterization of the empirical bin schema $\mathcal{B}_N$ in Proposition~\ref{prop:convergence}, and extensions to higher-order interactions and non-tabular modalities as developed in the companion note \texttt{barn\_effect\_extensions.tex}.
+Future directions include controlled empirical benchmarks against SHAP and ICE on standard attribution tasks, theoretical characterization of the empirical bin schema $\mathcal{B}_N$ in Proposition~\ref{prop:convergence}, and extensions to higher-order interactions and non-tabular modalities as developed in a separate extensions note.
 
 \begin{thebibliography}{99}
 

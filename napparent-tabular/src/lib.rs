@@ -1,14 +1,6 @@
 //! napparent tabular preprocessing (Apache Arrow + ndarray).
 //!
-//! Python reference: `reference/nnm_tabular.py` in this workspace.
-//!
-//! ## Parity notes
-//!
-//! - **Global mean** (`avg_outcome`): Python `vals_map_updating` overwrites `self.avg_outcome` each
-//!   chunk; this crate uses a **cumulative sum / count** so the final mean matches all rows.
-//! - **`_effect` columns** (reference uses `_barn`): Diffs use `col_combined - avg_outcome` with a
-//!   **scalar** global mean (fixes invalid `self.avg_outcome[g]` in the Python source).
-//! - **Hash order**: Effect column order follows column index order, not `HashMap` iteration.
+//! Formal algorithm: see `paper/` in the repository root.
 
 mod activation;
 mod aggregator;

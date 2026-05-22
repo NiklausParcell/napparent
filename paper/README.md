@@ -11,7 +11,6 @@ The paper uses the name **Barn Effect**; the Rust crate exports `{column}_effect
 | Start here | [`barn_effect_tight.tex`](barn_effect_tight.tex) | Short exposition; closest to default crate activations |
 | Full detail | [`barn_effect.tex`](barn_effect.tex) | Definitions, convergence, complexity |
 | Lookup | [`barn_effect_symbols.tex`](barn_effect_symbols.tex) | Notation and symbol glossary |
-| Optional | [`barn_effect_extensions.tex`](barn_effect_extensions.tex) | Domain extensions not yet in Rust |
 
 ## Mapping to `napparent-tabular`
 
@@ -24,8 +23,6 @@ The paper uses the name **Barn Effect**; the Rust crate exports `{column}_effect
 | Per-chunk significance threshold $\theta_k = \lfloor \alpha n_k \rfloor$ | `vals_map_updating` (default $\alpha = 0.01$) |
 | Fixed partner divisor $m_c = p - 1$ | `PairAggregator::m_divisor` |
 | Three-pass chunked pipeline | `transform_record_batches` / `transform_record_batches_chunked` |
-
-Python reference for behavioral comparison: [`reference/nnm_tabular.py`](../reference/nnm_tabular.py).
 
 ## Build PDF locally
 
