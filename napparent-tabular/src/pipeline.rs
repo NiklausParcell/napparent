@@ -110,7 +110,11 @@ fn transform_record_batches_chunked_inner(
         pst.preprocess_batch(&chunk)?;
     }
     pst.finish_map(&config.bin_depth)?;
-    check_limit(pst.cols.len(), limits.max_active_columns, "max_active_columns")?;
+    check_limit(
+        pst.cols.len(),
+        limits.max_active_columns,
+        "max_active_columns",
+    )?;
     reporter.pass_finish(&format!(
         "pass 1/3 done in {:.1}s: bins finished, {} active feature columns",
         pass1.elapsed_secs(),
@@ -143,7 +147,11 @@ fn transform_record_batches_chunked_inner(
             &format!("KG update batch {}/{}", i + 1, n_batches),
         );
         agg.vals_map_updating(&x_proc, &outcomes)?;
-        check_limit(agg.vals_map_len(), limits.max_vals_map_keys, "max_vals_map_keys")?;
+        check_limit(
+            agg.vals_map_len(),
+            limits.max_vals_map_keys,
+            "max_vals_map_keys",
+        )?;
     }
     agg.finish_map();
     reporter.pass_finish(&format!(
@@ -174,10 +182,7 @@ fn transform_record_batches_chunked_inner(
         let batch = batch_from_map(schema, nnm)?;
         out_batches.push(batch);
     }
-    reporter.pass_finish(&format!(
-        "pass 3/3 done in {:.1}s",
-        pass3.elapsed_secs()
-    ));
+    reporter.pass_finish(&format!("pass 3/3 done in {:.1}s", pass3.elapsed_secs()));
 
     let total_out_rows: usize = out_batches.iter().map(|b| b.num_rows()).sum();
     let n_cols = out_batches.first().map(|b| b.num_columns()).unwrap_or(0);
@@ -288,12 +293,8 @@ mod tests {
     #[test]
     fn pipeline_runs() {
         let b = batch_small();
-        let r = transform_record_batches(
-            &[b.clone(), b],
-            "target",
-            &["target".into()],
-            &run_config(),
-        );
+        let r =
+            transform_record_batches(&[b.clone(), b], "target", &["target".into()], &run_config());
         assert!(r.is_ok());
         let out = r.unwrap();
         assert_eq!(out.num_rows(), 4);
@@ -304,16 +305,11 @@ mod tests {
         let b = batch_small();
         let batches = [b.clone(), b];
         let config = run_config();
-        let concat = transform_record_batches(&batches, "target", &["target".into()], &config)
-            .unwrap();
-        let chunked = transform_record_batches_chunked(
-            &batches,
-            "target",
-            &["target".into()],
-            &config,
-            None,
-        )
-        .unwrap();
+        let concat =
+            transform_record_batches(&batches, "target", &["target".into()], &config).unwrap();
+        let chunked =
+            transform_record_batches_chunked(&batches, "target", &["target".into()], &config, None)
+                .unwrap();
         let chunked_rows: usize = chunked.iter().map(|b| b.num_rows()).sum();
         assert_eq!(concat.num_rows(), chunked_rows);
         assert_eq!(concat.num_columns(), chunked[0].num_columns());
@@ -327,14 +323,9 @@ mod tests {
             max_rows: Some(1),
             ..TransformLimits::default()
         });
-        let err = transform_record_batches_chunked(
-            &[b],
-            "target",
-            &["target".into()],
-            &config,
-            None,
-        )
-        .unwrap_err();
+        let err =
+            transform_record_batches_chunked(&[b], "target", &["target".into()], &config, None)
+                .unwrap_err();
         assert!(err.contains("max_rows"));
     }
 

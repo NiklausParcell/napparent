@@ -2,8 +2,8 @@
 
 use arrow::array::{Array, ArrayRef, AsArray, Float32Array};
 use arrow::datatypes::DataType;
-use ndarrow::{AsNdarray, IntoArrow};
 use ndarray::{Array1, ArrayView1};
+use ndarrow::{AsNdarray, IntoArrow};
 use std::sync::Arc;
 
 pub fn map_ndarrow_err(e: ndarrow::error::NdarrowError) -> String {

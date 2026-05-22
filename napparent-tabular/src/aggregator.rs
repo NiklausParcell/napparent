@@ -246,9 +246,7 @@ impl PairAggregator {
         let mut out: HashMap<usize, Array1<i32>> = HashMap::new();
         for col_idx in col_indices {
             let name = self.col_graph_names[col_idx].clone();
-            let col = x
-                .get(&name)
-                .ok_or_else(|| format!("missing col {name}"))?;
+            let col = x.get(&name).ok_or_else(|| format!("missing col {name}"))?;
             let labels = Self::column_vec_to_labels(col)?;
             if labels.len() != n {
                 return Err("column length mismatch in x_processed_to_mapped".into());
@@ -283,7 +281,11 @@ impl PairAggregator {
                 let key = canonical_val_pair(a[i], b[i]);
                 let out_i = {
                     let x = outcomes.get(i);
-                    if x.is_nan() { 0.0 } else { x }
+                    if x.is_nan() {
+                        0.0
+                    } else {
+                        x
+                    }
                 };
                 let entry = local.entry(key).or_insert(PairStats {
                     sum: 0.0,
@@ -377,9 +379,9 @@ impl PairAggregator {
 
         let mut nnm: HashMap<String, ColumnVec> = HashMap::new();
         for name in &self.col_graph_names {
-            let colvec = x_processed.remove(name).unwrap_or_else(|| {
-                ColumnVec::Utf8(vec!["no data".into(); n])
-            });
+            let colvec = x_processed
+                .remove(name)
+                .unwrap_or_else(|| ColumnVec::Utf8(vec!["no data".into(); n]));
             nnm.insert(name.clone(), colvec);
         }
 
@@ -451,7 +453,8 @@ mod tests {
     fn vals_map_merges_orientations() {
         let mut agg = two_col_aggregator();
         let x = oriented_pair_data();
-        agg.vals_map_updating(&x, &outcomes_slice(&[1.0, 2.0])).unwrap();
+        agg.vals_map_updating(&x, &outcomes_slice(&[1.0, 2.0]))
+            .unwrap();
 
         let id5 = agg.val_map_str["5"];
         let id7 = agg.val_map_str["7"];
@@ -467,7 +470,8 @@ mod tests {
     fn finish_map_no_duplicate_keys() {
         let mut agg = two_col_aggregator();
         let x = oriented_pair_data();
-        agg.vals_map_updating(&x, &outcomes_slice(&[1.0, 2.0])).unwrap();
+        agg.vals_map_updating(&x, &outcomes_slice(&[1.0, 2.0]))
+            .unwrap();
         agg.finish_map();
         assert_eq!(agg.vals_map_avg.len(), agg.vals_map.len());
     }
@@ -476,7 +480,8 @@ mod tests {
     fn lookup_symmetric() {
         let mut agg = two_col_aggregator();
         let x = oriented_pair_data();
-        agg.vals_map_updating(&x, &outcomes_slice(&[1.0, 2.0])).unwrap();
+        agg.vals_map_updating(&x, &outcomes_slice(&[1.0, 2.0]))
+            .unwrap();
         agg.finish_map();
 
         let col_vals = agg.make_cvto_inner(&x).unwrap();

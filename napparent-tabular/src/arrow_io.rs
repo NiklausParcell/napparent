@@ -261,7 +261,9 @@ pub fn target_to_vec(target: &TargetColumn) -> Vec<f32> {
 
 pub fn target_as_outcomes(target: &TargetColumn) -> OutcomesRef<'_> {
     match target {
-        TargetColumn::F32(a) => OutcomesRef::View(f32_view(a).expect("F32 target validated at split")),
+        TargetColumn::F32(a) => {
+            OutcomesRef::View(f32_view(a).expect("F32 target validated at split"))
+        }
         TargetColumn::Owned(v) => OutcomesRef::Slice(v),
     }
 }
@@ -300,8 +302,14 @@ impl OutcomesRef<'_> {
 
     pub fn to_nan0_vec(&self) -> Vec<f32> {
         match self {
-            OutcomesRef::View(v) => v.iter().map(|&x| if x.is_nan() { 0.0 } else { x }).collect(),
-            OutcomesRef::Slice(s) => s.iter().map(|&x| if x.is_nan() { 0.0 } else { x }).collect(),
+            OutcomesRef::View(v) => v
+                .iter()
+                .map(|&x| if x.is_nan() { 0.0 } else { x })
+                .collect(),
+            OutcomesRef::Slice(s) => s
+                .iter()
+                .map(|&x| if x.is_nan() { 0.0 } else { x })
+                .collect(),
         }
     }
 }
@@ -421,8 +429,7 @@ mod tests {
     #[test]
     fn split_batch_views_f32_zero_copy() {
         let batch = sample_batch();
-        let (chunk, target, _cg) =
-            split_batch_views(&batch, "target", &["target".into()]).unwrap();
+        let (chunk, target, _cg) = split_batch_views(&batch, "target", &["target".into()]).unwrap();
         assert!(matches!(target, TargetColumn::F32(_)));
         assert!(matches!(chunk.cols[1], BatchColumn::F32(_)));
     }
@@ -431,8 +438,7 @@ mod tests {
     fn split_batch_xy_matches_views_materialized() {
         let batch = sample_batch();
         let (table, y, cg) = split_batch_xy(&batch, "target", &["target".into()]).unwrap();
-        let (chunk, target, cg2) =
-            split_batch_views(&batch, "target", &["target".into()]).unwrap();
+        let (chunk, target, cg2) = split_batch_views(&batch, "target", &["target".into()]).unwrap();
         assert_eq!(cg, cg2);
         assert_eq!(y, target_to_vec(&target));
         assert_eq!(table.names, chunk.names);

@@ -125,9 +125,24 @@ mod tests {
     #[test]
     fn log_frequency_weighted_mean_cases() {
         let act = KgPairActivation::LogFrequencyWeightedMean;
-        assert_eq!(act.activate(PairStats { sum: 10.0, count: 1.0 }), 0.0);
-        assert_eq!(act.activate(PairStats { sum: 5.0, count: 0.5 }), 0.0);
-        let v = act.activate(PairStats { sum: 50.0, count: 10.0 });
+        assert_eq!(
+            act.activate(PairStats {
+                sum: 10.0,
+                count: 1.0
+            }),
+            0.0
+        );
+        assert_eq!(
+            act.activate(PairStats {
+                sum: 5.0,
+                count: 0.5
+            }),
+            0.0
+        );
+        let v = act.activate(PairStats {
+            sum: 50.0,
+            count: 10.0,
+        });
         assert!((v - 5.0_f32).abs() < 1e-5);
     }
 

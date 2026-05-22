@@ -299,11 +299,9 @@ impl PreprocessStream {
                     round_to_significant_figures(ArrayView1::from(f32s.as_slice()), 4).to_vec(),
                 ))
             }
-            BatchColumn::Owned(ColumnVec::F32(v)) => {
-                Ok(nan_to_zero_f32(
-                    round_to_significant_figures(ArrayView1::from(v.as_slice()), 4).to_vec(),
-                ))
-            }
+            BatchColumn::Owned(ColumnVec::F32(v)) => Ok(nan_to_zero_f32(
+                round_to_significant_figures(ArrayView1::from(v.as_slice()), 4).to_vec(),
+            )),
             BatchColumn::Owned(ColumnVec::F32Array(a)) => Ok(nan_to_zero_f32(
                 round_to_significant_figures(a.view(), 4).to_vec(),
             )),
@@ -438,10 +436,7 @@ impl PreprocessStream {
         Ok(out)
     }
 
-    pub fn use_map_batch(
-        &self,
-        chunk: &BatchChunk,
-    ) -> Result<HashMap<String, ColumnVec>, String> {
+    pub fn use_map_batch(&self, chunk: &BatchChunk) -> Result<HashMap<String, ColumnVec>, String> {
         if !self.finished {
             return Err("finish_map must be called before use_map".into());
         }
@@ -567,7 +562,10 @@ fn batch_column_to_column_vec(col: &BatchColumn) -> Result<ColumnVec, String> {
     crate::arrow_io::batch_column_to_owned(col)
 }
 
-fn map_categorical_bins_arrow(cp: &ColumnPreprocess, col: &BatchColumn) -> Result<Vec<String>, String> {
+fn map_categorical_bins_arrow(
+    cp: &ColumnPreprocess,
+    col: &BatchColumn,
+) -> Result<Vec<String>, String> {
     match col {
         BatchColumn::Utf8(a) => {
             let mut out = Vec::with_capacity(a.len());
@@ -583,7 +581,9 @@ fn map_categorical_bins_arrow(cp: &ColumnPreprocess, col: &BatchColumn) -> Resul
             for t in &mut s {
                 normalize_nan_str(t);
             }
-            Ok(s.into_iter().map(|val| map_categorical_bins(cp, &val)).collect())
+            Ok(s.into_iter()
+                .map(|val| map_categorical_bins(cp, &val))
+                .collect())
         }
     }
 }
@@ -703,8 +703,7 @@ mod tests {
     #[test]
     fn preprocess_batch_matches_owned_path() {
         let batch = sample_batch();
-        let (chunk, _, cg) =
-            split_batch_views(&batch, "target", &["target".into()]).unwrap();
+        let (chunk, _, cg) = split_batch_views(&batch, "target", &["target".into()]).unwrap();
         let table = batch_chunk_to_table(&chunk).unwrap();
 
         let depth = BinDepth::new(4);

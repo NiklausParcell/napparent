@@ -3,8 +3,8 @@
 use arrow::record_batch::RecordBatch;
 use arrow_pyarrow::{FromPyArrow, IntoPyArrow};
 use napparent_tabular::{
-    split_batch_xy, transform_record_batches_chunked, CancelToken, ActivationConfig, BinDepth,
-    EffectActivation, KgPairActivation, TransformConfig, concat_same_schema,
+    concat_same_schema, split_batch_xy, transform_record_batches_chunked, ActivationConfig,
+    BinDepth, CancelToken, EffectActivation, KgPairActivation, TransformConfig,
 };
 use pyo3::exceptions::{PyKeyboardInterrupt, PyValueError};
 use pyo3::prelude::*;
@@ -77,8 +77,7 @@ fn map_transform_err(e: String) -> PyErr {
 
 fn py_interrupt_token() -> CancelToken {
     CancelToken::with_hook(Arc::new(|| {
-        Python::attach(|py| py.check_signals())
-            .map_err(|e| format!("interrupted by user: {e}"))
+        Python::attach(|py| py.check_signals()).map_err(|e| format!("interrupted by user: {e}"))
     }))
 }
 
@@ -105,8 +104,13 @@ fn run_concat<'py>(
 ) -> PyResult<RecordBatch> {
     let cancel = py_interrupt_token();
     py.detach(|| {
-        let chunks =
-            transform_record_batches_chunked(rs_batches, target, cols_to_drop, config, Some(&cancel))?;
+        let chunks = transform_record_batches_chunked(
+            rs_batches,
+            target,
+            cols_to_drop,
+            config,
+            Some(&cancel),
+        )?;
         concat_same_schema(&chunks)
     })
     .map_err(map_transform_err)

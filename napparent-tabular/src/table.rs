@@ -93,9 +93,7 @@ impl BatchChunk {
 impl BatchColumn {
     pub fn len(&self) -> usize {
         match self {
-            BatchColumn::F32(a)
-            | BatchColumn::F64(a)
-            | BatchColumn::Utf8(a) => a.len(),
+            BatchColumn::F32(a) | BatchColumn::F64(a) | BatchColumn::Utf8(a) => a.len(),
             BatchColumn::Owned(c) => c.len(),
         }
     }
