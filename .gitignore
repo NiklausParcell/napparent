@@ -5,6 +5,7 @@
 
 # Python / maturin (mixed project under ./python/)
 __pycache__/
+*.so
 *.py[cod]
 *$py.class
 .Python
