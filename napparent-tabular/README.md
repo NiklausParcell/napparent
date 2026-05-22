@@ -117,6 +117,10 @@ Known differences:
 - Output suffix is `_effect` (reference uses `_barn`).
 - Value-pair keys are canonical unordered `(min, max)` (reference keeps directed `(u,v)` and `(v,u)` separately).
 
+## Theory
+
+Formal write-up of the tabular algorithm: [`paper/`](../paper/) (start with [`barn_effect_tight.tex`](../paper/barn_effect_tight.tex)).
+
 ## Roadmap
 
 - **napparent-multimodal** — image/sensor → embedding space (future crate)
