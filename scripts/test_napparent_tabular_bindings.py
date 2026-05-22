@@ -18,13 +18,6 @@ import pyarrow.csv as pacsv
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "smoke.csv"
-LEGACY_DATA = REPO_ROOT / "data" / "tabular" / "TN_Jerry4.csv"
-
-
-def default_csv_path() -> Path:
-    if DEFAULT_FIXTURE.is_file():
-        return DEFAULT_FIXTURE
-    return LEGACY_DATA
 
 
 def main() -> int:
@@ -33,7 +26,7 @@ def main() -> int:
         "--csv",
         type=Path,
         default=None,
-        help="Path to input CSV (default: tests/fixtures/smoke.csv, else data/tabular/TN_Jerry4.csv)",
+        help="Path to input CSV (default: tests/fixtures/smoke.csv)",
     )
     parser.add_argument(
         "--limit",
@@ -77,7 +70,7 @@ def main() -> int:
         )
         return 1
 
-    csv_path: Path = args.csv if args.csv is not None else default_csv_path()
+    csv_path: Path = args.csv if args.csv is not None else DEFAULT_FIXTURE
     if not csv_path.is_file():
         print(f"CSV not found: {csv_path}", file=sys.stderr)
         return 1
@@ -98,20 +91,20 @@ def main() -> int:
 
     target = "std"
     cols_to_drop = [
-        "npi",
-        "billing_code",
-        "npi_zip5",
-        "census_zip",
-        "census_city",
-        "census_lat",
-        "census_lng",
-        "census_county_fips",
-        "census_county_name",
-        "median",
+        "col_a",
+        "col_b",
+        "col_c",
+        "col_d",
+        "col_e",
+        "col_f",
+        "col_g",
+        "col_h",
+        "col_i",
+        "col_j",
         target,
-        "count",
-        "family",
-        "sub_family",
+        "col_k",
+        "col_l",
+        "col_m",
     ]
 
     main_depth = 8
