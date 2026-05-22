@@ -20,7 +20,9 @@ The paper uses the name **Barn Effect**; the Rust crate exports `{column}_effect
 | Phase 1: binning / vocabulary | `PreprocessStream`, `BinDepth` |
 | Pair graph Φ, `(sum/count) × log10(count)` | `PairAggregator`, `KgPairActivation::LogFrequencyWeightedMean` |
 | Per-row effect = combined − global mean | `EffectActivation::GlobalMeanContrast`, `{col}_effect` |
-| Canonical unordered value-pair keys `(min, max)` | `PairAggregator` (see crate README Parity) |
+| Canonical key $\kappa(u,v) = (\min,\max)$ on encoded labels | `PairAggregator::canonical_val_pair` |
+| Per-chunk significance threshold $\theta_k = \lfloor \alpha n_k \rfloor$ | `vals_map_updating` (default $\alpha = 0.01$) |
+| Fixed partner divisor $m_c = p - 1$ | `PairAggregator::m_divisor` |
 | Three-pass chunked pipeline | `transform_record_batches` / `transform_record_batches_chunked` |
 
 Python reference for behavioral comparison: [`reference/nnm_tabular.py`](../reference/nnm_tabular.py).

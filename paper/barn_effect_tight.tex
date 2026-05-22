@@ -50,22 +50,26 @@ Disjoint column encodings identify $\mathcal{V}=\bigcup_i\mathcal{L}_i$ with $[V
 \end{definition}
 
 \section{Phase 2: accumulation and graph}
-For $(i,j)\in\mathcal{C}$, $i<j$, and each chunk, add to sparse $(W,C)$:
+For encoded labels $u,v \in [V]$, define $\kappa(u,v):=(\min\{u,v\},\max\{u,v\})$.
+Fix $\alpha \in [0,1)$ (default $0.01$); for chunk $\mathcal{D}_k$ with $n_k=|\mathcal{D}_k|$, set $\theta_k:=\lfloor \alpha n_k\rfloor$.
+For $(i,j)\in\mathcal{C}$ and each chunk, let $c_\kappa^{(k)}$ be the chunk-local count of rows with $\kappa(\ell^{(i)}(X_i^{(n)}),\ell^{(j)}(X_j^{(n)}))=\kappa$.
+If $c_\kappa^{(k)}>\theta_k$, add to sparse $(W,C)$:
 \begin{equation}
 \label{eq:WC-tight}
-\Delta W_{uv}^{(k)}=\!\!\sum_{\substack{n\in\mathcal{D}_k:\\ \ell^{(i)}(X_i^{(n)})=u,\,\ell^{(j)}(X_j^{(n)})=v}}\!\! Y^{(n)},\qquad
-\Delta C_{uv}^{(k)}=\bigl|\{n\in\mathcal{D}_k:\cdots\}\bigr|.
+\Delta W_{\kappa}^{(k)}=\!\!\sum_{\substack{n\in\mathcal{D}_k:\\ \kappa(\ell^{(i)}(X_i^{(n)}),\ell^{(j)}(X_j^{(n)}))=\kappa}}\!\! Y^{(n)},\qquad
+\Delta C_{\kappa}^{(k)}=c_\kappa^{(k)};
 \end{equation}
-Summing over chunks gives global $W_{uv},C_{uv}$ (partition-invariant).
+otherwise $\Delta W_{\kappa}^{(k)}=\Delta C_{\kappa}^{(k)}=0$.
+Summing over chunks gives global $W_{\kappa},C_{\kappa}$ keyed by $\kappa(u,v)$; when $\theta_k=0$ for all $k$, totals are partition-invariant.
 \begin{definition}[Interaction graph]
-$\Phi_{uv}=0$ if $C_{uv}\in\{0,1\}$, else $\Phi_{uv}=(W_{uv}/C_{uv})\log_{10}(C_{uv})$.
+$\Phi_{\kappa}=0$ if $C_{\kappa}\in\{0,1\}$, else $\Phi_{\kappa}=(W_{\kappa}/C_{\kappa})\log_{10}(C_{\kappa})$.
 \end{definition}
 
 \section{Inference}
-For row $n$, $\psi_{ij}^{(n)}=\Phi_{\ell^{(i)}(X_i^{(n)}),\ell^{(j)}(X_j^{(n)})}$.
-Let $d_c^{(n)}=|\{j\neq c:\psi_{cj}^{(n)}\neq 0\}|$.
+For row $n$, $\psi_{ij}^{(n)}=\Phi_{\kappa(\ell^{(i)}(X_i^{(n)}),\ell^{(j)}(X_j^{(n)}))}$.
+Let $m_c:=p-1$.
 \[
-A_c^{(n)}=\begin{cases}0 & d_c^{(n)}=0,\\ \dfrac{1}{d_c^{(n)}}\sum_{j\neq c}\psi_{cj}^{(n)} & \text{else.}\end{cases}
+A_c^{(n)}=\frac{1}{m_c}\sum_{j\neq c}\psi_{cj}^{(n)},
 \qquad
 \delta_c^{(n)}=A_c^{(n)}-\bar{Y},\quad \bar{Y}=\frac{1}{N}\sum_n Y^{(n)}.
 \]
@@ -74,7 +78,7 @@ Attributions do \emph{not} satisfy an efficiency axiom $\sum_c\delta_c^{(n)}=Y^{
 
 \section{Properties}
 \begin{remark}
-Chunks only change how \eqref{eq:WC-tight} is scheduled; totals match one pass over $\mathcal{D}$.
+When $\theta_k=0$ for all chunks, \eqref{eq:WC-tight} is scheduled additively and totals match one pass over $\mathcal{D}$; otherwise borderline pairs may depend on partition.
 \end{remark}
 
 \begin{proposition}[Complexity]
@@ -101,15 +105,14 @@ Combine and rescale.
 \end{proof}
 
 \begin{remark}[Support]
-Zero $\Phi_{uv}$ does not imply $\mathbb{E}[Y\mid u,v]=0$: $C_{uv}=0$ means unseen; $C_{uv}=1$ is zeroed by construction.
+Zero $\Phi_{\kappa}$ does not imply $\mathbb{E}[Y\mid u,v]=0$: $C_{\kappa}=0$ means unseen; $C_{\kappa}=1$ is zeroed by construction.
 Sparse cells --- partial identification \cite{Manski2003}; inference cautions \cite{Agresti2013}.
-The divisor $d_c^{(n)}$ averages only partners with nonzero $\Phi$ support at inference (data-relative context), not a full $p-1$ counterfactual split.
+Column attribution averages over all $m_c=p-1$ partners; absent pairs contribute zero.
 \end{remark}
 
 \section{Implementation (minimal)}
-Realize $(W,C)$ as one hash map on canonical $(u,v)$ with $i<j$.
-$Y^{(n)}$ may be raw $y$, class probability, or $\hat f(\bm{x}^{(n)})$ (same pipeline).
-Typical engineering: column-prefixed string keys for $\mathcal{V}$, NaN handling fixed \emph{before} binning; recompute $\bm{\Phi}$ from $(W,C)$ after all chunks.
+Phase~1 builds $\mathcal{B}$; Phase~2 accumulates $(W,C)$ under $\kappa(u,v)$ with threshold $\theta_k$, then forms $\bm{\Phi}$; Phase~3 computes $\psi$, $A_c$, and $\delta_c$.
+$Y^{(n)}$ may be raw $y$, class probability, or $\hat f(\bm{x}^{(n)})$.
 
 \section{Related work (one pass)}
 Co-occurrence of discretized items parallels frequent-pattern mining \cite{Agrawal1994} but $W$ supplies a supervised conditional mean, not binary support alone.
