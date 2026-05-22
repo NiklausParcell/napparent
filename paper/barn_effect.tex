@@ -132,7 +132,7 @@ so wider $r_i$ yields coarser rounding and narrower $r_i$ finer rounding (e.g., 
 
 \paragraph{Missing inputs before binning.}
 The maps $\ell^{(i)}$ are applied only after a practitioner-chosen \emph{missing-input convention} maps raw cells to inputs in $\mathrm{dom}(X_i)$.
-\S\ref{sec:implementation} fixes one default pipeline (numerical \texttt{NaN}$\to 0$, categorical missing$\to\varepsilon$ when rare, outcome \texttt{NaN}$\to 0$ for accumulation).
+One default convention replaces numerical \texttt{NaN} with zero before bin assignment, treats categorical \texttt{NaN} as \texttt{empty} (mapping to $\varepsilon$ when infrequent), and replaces outcome \texttt{NaN} with zero so such rows contribute zero to $W_{uv}$.
 Histograms used for frequencies, endpoints $\min/\max$, and hence $r_i$ and $\mathcal{B}_N$, are computed from these \emph{effective} values, so systematic missingness can concentrate mass on imputed atoms and couples $\mathcal{B}_N$ to the missing-data rule (potentially analogous to MAR/MNAR issues in exploratory analysis).
 
 Figure~\ref{fig:num-bins} illustrates numerical binning with $B=4$: the top-4 most frequent values are selected as boundary candidates; the largest is replaced by the column maximum, leaving three interior split points and yielding exactly $B=4$ bins.
@@ -279,31 +279,48 @@ For sample $n$ and column pair $(i,j) \in \mathcal{C}$, the \emph{value pair} is
 \]
 \end{definition}
 
+\begin{definition}[Canonical value-pair key]
+\label{def:canonical-key}
+For encoded labels $u,v \in [V]$, define the \emph{canonical key}
+\[
+  \kappa(u,v) \;\coloneqq\; \bigl(\min\{u,v\},\,\max\{u,v\}\bigr).
+\]
+All accumulation and lookup use $\kappa\bigl(\ell^{(i)}(X_i^{(n)}),\,\ell^{(j)}(X_j^{(n)})\bigr)$.
+\end{definition}
+
 \begin{definition}[Streaming accumulator]
 \label{def:accumulator}
 Maintain two sparse matrices $\bm{W}, \bm{C} \in \mathbb{R}^{V \times V}$, initialized to $\bm{0}$.
-For each chunk $\mathcal{D}_k$, column pair $(i,j) \in \mathcal{C}$ (with $i < j$), define the per-chunk increments
+Fix a significance rate $\alpha \in [0,1)$ (default $\alpha = 0.01$).
+For chunk $\mathcal{D}_k$ with $n_k \coloneqq |\mathcal{D}_k|$, set $\theta_k \coloneqq \lfloor \alpha n_k \rfloor$.
+For each column pair $(i,j) \in \mathcal{C}$ and canonical key $\kappa = \kappa(u,v)$ realized in $\mathcal{D}_k$, let
+\[
+  c_{\kappa}^{(k)} \;\coloneqq\;
+  \bigl|\bigl\{n \in \mathcal{D}_k :
+  \kappa\bigl(\ell^{(i)}(X_i^{(n)}),\,\ell^{(j)}(X_j^{(n)})\bigr) = \kappa\bigr\}\bigr|.
+\]
+If $c_{\kappa}^{(k)} > \theta_k$, define the per-chunk increments
 \begin{align}
-  \Delta W_{uv}^{(k)} \;\coloneqq\;
-  \sum_{\substack{n \in \mathcal{D}_k :\\ \ell^{(i)}(X_i^{(n)})=u,\;\ell^{(j)}(X_j^{(n)})=v}} Y^{(n)},
+  \Delta W_{\kappa}^{(k)} \;\coloneqq\;
+  \sum_{\substack{n \in \mathcal{D}_k :\\ \kappa\bigl(\ell^{(i)}(X_i^{(n)}),\,\ell^{(j)}(X_j^{(n)})\bigr)=\kappa}} Y^{(n)},
   \label{eq:W-update}\\[6pt]
-  \Delta C_{uv}^{(k)} \;\coloneqq\;
-  \bigl|\bigl\{n \in \mathcal{D}_k : \ell^{(i)}(X_i^{(n)})=u,\;\ell^{(j)}(X_j^{(n)})=v\bigr\}\bigr|.
+  \Delta C_{\kappa}^{(k)} \;\coloneqq\; c_{\kappa}^{(k)};
   \label{eq:C-update}
 \end{align}
-Pairs $(u,v)$ absent from chunk $\mathcal{D}_k$ contribute $\Delta W_{uv}^{(k)} = \Delta C_{uv}^{(k)} = 0$.
-After all $K$ chunks the final values are
+otherwise set $\Delta W_{\kappa}^{(k)} = \Delta C_{\kappa}^{(k)} = 0$.
+After all $K$ chunks,
 \[
-  W_{uv} \;\coloneqq\; \sum_{k=1}^{K} \Delta W_{uv}^{(k)}, \qquad
-  C_{uv} \;\coloneqq\; \sum_{k=1}^{K} \Delta C_{uv}^{(k)},
+  W_{\kappa} \;\coloneqq\; \sum_{k=1}^{K} \Delta W_{\kappa}^{(k)}, \qquad
+  C_{\kappa} \;\coloneqq\; \sum_{k=1}^{K} \Delta C_{\kappa}^{(k)},
 \]
-where $(u,v)$ is always keyed in the canonical column order $i < j$ imposed by $\mathcal{C}$.
+indexed by the canonical key $\kappa(u,v)$.
 \end{definition}
 
 \begin{remark}[Additive accumulation]
 \label{rem:incremental}
-Because the increments \eqref{eq:W-update}--\eqref{eq:C-update} are additive and the chunks $\mathcal{D}_1,\ldots,\mathcal{D}_K$ are disjoint, $W_{uv}$ and $C_{uv}$ depend only on the full data $\mathcal{D}$, not on how $\mathcal{D}$ is partitioned into chunks.
-Consequently, $(\bm{W}, \bm{C})$ are sufficient statistics for $\bm{\Phi}$: new data may be incorporated by resuming accumulation from the existing totals, with no prior samples retained.
+Passing increments \eqref{eq:W-update}--\eqref{eq:C-update} are additive over disjoint chunks, so new data may be incorporated by resuming from existing $(\bm{W}, \bm{C})$ totals.
+When $\theta_k = 0$ for all $k$, $W_{\kappa}$ and $C_{\kappa}$ depend only on $\mathcal{D}$, not on its partition; with $\theta_k > 0$, borderline pairs may depend on chunking.
+Consequently, $(\bm{W}, \bm{C})$ are sufficient statistics for $\bm{\Phi}$ given the chosen partition and thresholds.
 \end{remark}
 
 \begin{definition}[Interaction graph]
@@ -330,8 +347,7 @@ The $C_{uv} = 1$ boundary case falls out naturally: $\log_{10}(1) = 0$, so a sin
 \begin{remark}[Undirected edges]
 \label{rem:symmetry}
 The co-occurrence event ``column $i$ at bin $u$, column $j$ at bin $v$'' is identical to ``column $j$ at bin $v$, column $i$ at bin $u$'': there is no inherent direction.
-The accumulator stores each event under a single canonical key determined by column order $i < j$; inference recovers the correct edge weight by applying the same ordering (see Section~\ref{sec:implementation}).
-The interaction graph $G_\Phi$ is therefore undirected.
+The accumulator stores each event under the canonical key $\kappa(u,v)$ (Definition~\ref{def:canonical-key}); the interaction graph $G_\Phi$ is therefore undirected.
 \end{remark}
 
 \section{Inference: attribution from the interaction graph}
@@ -342,25 +358,23 @@ The interaction graph $G_\Phi$ is therefore undirected.
 For sample $n$ and column pair $(i,j) \in \mathcal{C}$, the \emph{pairwise score} is
 \begin{equation}
   \psi_{ij}^{(n)} \;\coloneqq\;
-  \Phi_{\,\ell^{(i)}(X_i^{(n)}),\;\ell^{(j)}(X_j^{(n)})}.
+  \Phi_{\,\kappa\bigl(\ell^{(i)}(X_i^{(n)}),\,\ell^{(j)}(X_j^{(n)})\bigr)}.
   \label{eq:psi}
 \end{equation}
-This is a single entry lookup in $G_\Phi$: given the bin labels for columns $i$ and $j$ at sample $n$, retrieve the edge weight $\Phi_{uv}$.
-If $(u,v) \notin E_\Phi$, then $\psi_{ij}^{(n)} = 0$.
+This is a single entry lookup in $G_\Phi$ under the canonical key $\kappa$.
+If the key is absent from $E_\Phi$, then $\psi_{ij}^{(n)} = 0$.
 \end{definition}
 
 \begin{definition}[Column attribution score $A_c^{(n)}$]
 \label{def:col-attr}
-Let $d_c^{(n)} \coloneqq \bigl|\{j \neq c : \psi_{cj}^{(n)} \neq 0\}\bigr|$ be the number of column partners with a nonzero pairwise score for column $c$ in sample $n$.
+Let $m_c \coloneqq p - 1$ be the number of column partners for feature $c$.
 The \emph{column attribution score} is
 \begin{equation}
-  A_c^{(n)} \;\coloneqq\; \begin{cases}
-    0 & d_c^{(n)} = 0, \\[4pt]
-    \displaystyle\frac{1}{d_c^{(n)}} \sum_{\substack{j=1\\j\neq c}}^{p} \psi_{cj}^{(n)} & d_c^{(n)} > 0.
-  \end{cases}
+  A_c^{(n)} \;\coloneqq\;
+  \frac{1}{m_c} \sum_{\substack{j=1\\j\neq c}}^{p} \psi_{cj}^{(n)}.
   \label{eq:col-attr}
 \end{equation}
-Normalizing by $d_c^{(n)}$ rather than $p-1$ excludes value pairs absent from the training data from the average, rather than treating their absence as a zero signal.
+Absent pairs enter as zero and are averaged with all partners.
 \end{definition}
 
 \begin{remark}[Shared pairwise edges]
@@ -408,8 +422,8 @@ The \emph{global importance} of feature $c$ is the mean Barn attribution across 
 
 \begin{remark}[Chunk-additive accumulation]
 \label{prop:chunk-additive}
-Because increments \eqref{eq:W-update}--\eqref{eq:C-update} are additive over disjoint chunks, for every $(u,v)$ the totals $W_{uv}$ and $C_{uv}$ agree with those obtained from a single uninterrupted pass over $\mathcal{D}$.
-Chunking is a streaming implementation detail; it does not change the defined statistics.
+Increments \eqref{eq:W-update}--\eqref{eq:C-update} are additive over disjoint chunks for pairs that pass the per-chunk threshold $\theta_k$ in every chunk where they appear.
+When $\theta_k = 0$ for all $k$, totals $W_{\kappa}$ and $C_{\kappa}$ agree with a single pass over $\mathcal{D}$; otherwise partition may affect borderline pairs.
 \end{remark}
 
 \begin{proposition}[Complexity]
@@ -471,9 +485,8 @@ In practice the raw $\Phi_{uv}$ values are preferred for attribution because the
 \begin{remark}[Column attributions and random support]
 \label{rem:conv-col}
 Under Assumption~\ref{asm:fixed-bins}, Proposition~\ref{prop:convergence} yields almost-sure stabilization of $\Phi_{uv}$ on every fixed cell $(u,v)$ with $\pi>0$.
-For a fixed row $n$ and column $c$, each nonzero $\psi_{cj}^{(n)}$ is an edge lookup into this limit graph; however, $A_c^{(n)}$ averages only over partners $j$ with $\psi_{cj}^{(n)}\neq 0$, with denominator $d_c^{(n)}$ random and data-dependent.
-No single deterministic limit of the form $A_c^{(n)} \to (1/d_c)\sum_j(\cdots)$ is claimed: aggregating a random subset of dependent edge terms under a random $d_c^{(n)}$ is not summarized by a fixed-$d_c$ asymptotic identity.
-The interpretive role of $d_c^{(n)}$ and sparse $\Phi$ support is discussed in Remark~\ref{rem:support}.
+For a fixed row $n$ and column $c$, each $\psi_{cj}^{(n)}$ is an edge lookup into this limit graph, and $A_c^{(n)}$ averages these lookups with fixed divisor $m_c = p-1$.
+Sparse $\Phi$ support is discussed in Remark~\ref{rem:support}.
 \end{remark}
 
 \begin{remark}[Support and identifiability]
@@ -482,8 +495,7 @@ An absent or zero-weight entry $\Phi_{uv}$ must not be read as confirming $\math
 If $C_{uv}=0$, the stratum $(u,v)$ is unseen in training; if $C_{uv}=1$, \eqref{eq:Phi} sets $\Phi_{uv}=0$, suppressing unreliable $\log$-scaled weight rather than asserting a negligible effect.
 Classic categorical-data analysis warns that sparse and empty contingency cells carry weak asymptotic justification for inferring cell-specific quantities without auxiliary assumptions \cite{Agresti2013}; similarly, conditional means on unobserved or barely observed strata are typically only \emph{partially identifiable} alongside many compatible values under the empirical distribution \cite{Manski2003}.
 
-The denominator $d_c^{(n)}$ in Definition~\ref{def:col-attr} is therefore deliberate: $A_c^{(n)}$ averages $\psi_{cj}^{(n)}$ only over partners $j$ for which the lookup returns nonzero interaction mass at inference, i.e.\ co-occurrence patterns that accrued enough training evidence (beyond singleton pairs) under the induced bins.
-Thus $d_c^{(n)}$ encodes ``revealed'' pairwise context at the current training snapshot relative to \(p-1\) hypotheticals, matching a descriptive attribution goal rather than a complete allocation of hypothetical counterfactuals.
+Definition~\ref{def:col-attr} averages $\psi_{cj}^{(n)}$ over all $m_c = p-1$ column partners; absent pairs contribute zero rather than being excluded from the denominator.
 
 Finally, distinguish structural from transient sparsity.
 In Proposition~\ref{prop:convergence}'s setting---$\mathcal{B}$ held fixed while $N\to\infty$, as in Assumption~\ref{asm:fixed-bins}---if $\pi_{uv}>0$ for a cell $(u,v)$, then $C_{uv}\to\infty$ almost surely under i.i.d.\ sampling and, once $C_{uv}>1$, the construction \eqref{eq:Phi} admits a nontrivial $\Phi_{uv}$.
@@ -493,49 +505,8 @@ Persistent emptiness as $N\to\infty$ within that asymptotic regime is instead co
 \section{Implementation}
 \label{sec:implementation}
 
-The definitions in Sections~\ref{sec:discretize}--\ref{sec:attribution} specify what the algorithm computes.
-This section describes how those computations are realized.
-Three design principles connect the math to the code: bin labels are column-prefixed integer keys ensuring vocabulary disjointness (Remark~\ref{rem:col-specific}); $\bm{W}$ and $\bm{C}$ are stored as a single hash map rather than a dense $V \times V$ matrix, realizing the sparse edge set $E_\Phi$ in $O(p^2 B^2)$ space; and inference is a sequence of $O(1)$ hash-map lookups, each keyed by the canonical column order established during training (Remark~\ref{rem:symmetry}).
-
-\paragraph{Parametric-optional outcome.}
-The practitioner fixes $Y^{(n)} \in \mathbb{R}$ per instance of the accumulator: raw regression targets (possibly standardized); binary labels $\{0,1\}$ or predicted positive-class probability $\hat{P}(\mathrm{class}=1 \mid \bm{x}^{(n)})$; multi-class setups by running $K$ independent accumulators with $Y^{(n)} = \hat{P}(\mathrm{class}=k \mid \bm{x}^{(n)})$ for each $k$; or predictions $\hat{f}(\bm{x}^{(n)})$ from any trained model $\hat{f}$ to explain model behavior rather than the raw label distribution.
-No further distributional assumption is required beyond measurability of the chosen scalar.
-
-\paragraph{Phase 1: Vocabulary construction.}
-The bin schema $\mathcal{B}$ is built in a single forward pass with no chunk reloaded (Remark~\ref{rem:stream-phase1}).
-Rounding uses $s_i$ from \eqref{eq:si-rounding}; for each numerical column $i$, maintain running rounded-value counts, column minimum, and column maximum across chunks; after the final chunk, select the top-$B_i$ most frequent rounded values as boundary candidates, replace the largest with the observed maximum, and prepend the minimum to produce $B_i + 1$ boundary values defining $B_i$ bins.
-For each categorical column $i$, merge per-chunk category counts and retain the top-$B_i$ categories; all others map to $\varepsilon$.
-Each bin label string is prefixed with its column index before insertion into the global string-to-integer map (e.g., interval $[1.2,3.4)$ in column 2 becomes \texttt{col\_2:[1.2,3.4)}), guaranteeing that identical raw values in different columns receive distinct integers in $\mathcal{V}$.
-
-\paragraph{Missing values.}
-This implements the Phase~1 missing-input conventions in \S\ref{sec:discretize}: before bin assignment, numerical \texttt{NaN} is replaced with zero; categorical \texttt{NaN} is treated as the string \texttt{empty}, mapping to $\varepsilon$ if infrequent; outcome \texttt{NaN} is replaced with zero, contributing zero to $W_{uv}$ for every pair in that row.
-These rules apply before any accumulation; they embody one choice of measurable missingness map feeding $\ell^{(i)}$.
-
-\paragraph{Phase 2: Accumulating co-occurrence statistics.}
-The sparse matrices $\bm{W}$ and $\bm{C}$ are realized as a single hash map from canonical integer pairs $(u,v)$ to floating-point values, where $u = \ell^{(i)}(X_i^{(n)})$ and $v = \ell^{(j)}(X_j^{(n)})$ with $i < j$ as ordered in $\mathcal{C}$.
-For each chunk $\mathcal{D}_k$ and each column pair $(i,j) \in \mathcal{C}$, aggregate co-occurrences within the chunk: for every $(u,v)$ realized by at least one row in $\mathcal{D}_k$, update
-$W_{uv} \mathrel{+}= \sum_{\{n \in \mathcal{D}_k:\,\ell^{(i)}=u,\,\ell^{(j)}=v\}} Y^{(n)}$ and $C_{uv} \mathrel{+}= |\{n \in \mathcal{D}_k : \ell^{(i)}=u,\, \ell^{(j)}=v\}|$.
-Equivalently, scan each row of $\mathcal{D}_k$ and update the hash map once per column pair.
-Concurrently, a running sum $S \mathrel{+}= \sum_{n \in \mathcal{D}_k} Y^{(n)}$ and count $M \mathrel{+}= n_k$ accumulate the global mean; $\bar{Y} = S/M$ is finalized after the last chunk.
-Because all updates are additive (Remark~\ref{rem:incremental}), the algorithm can be extended to new data at any point by resuming from the existing $(\bm{W}, \bm{C})$ state and recomputing $\bm{\Phi}$.
-
-\paragraph{Computing $\bm{\Phi}$.}
-After all chunks, apply \eqref{eq:Phi} to each entry with $C_{uv} > 1$; discard entries with $C_{uv} \le 1$.
-The result is the trained artifact: a sparse hash map from $(u,v)$ pairs to edge weights.
-The log factor gives diminishing returns to frequency: a pair with conditional mean $\hat{\mu} = 0.9$ observed $C = 3$ times scores $0.9 \times \log_{10}(3) \approx 0.43$, while a pair with $\hat{\mu} = 0.5$ and $C = 100$ scores $0.5 \times 2.0 = 1.00$, so a frequently observed moderate signal outweighs a sparsely observed strong one.
-
-\paragraph{Inference.}
-For each row $n$: (i) map each $X_i^{(n)}$ to $\ell^{(i)}(X_i^{(n)}) \in [V]$ via $\mathcal{B}$; (ii) for each pair $(i,j) \in \mathcal{C}$, look up $\Phi_{uv}$ in the hash map using the canonical key $(\ell^{(i)}, \ell^{(j)})$ — absent keys return 0; (iii) for each column $c$, recover its scores by looking up $(\ell^{(c)}, \ell^{(j)})$ when $c < j$ and $(\ell^{(j)}, \ell^{(c)})$ when $c > j$; (iv) count the nonzero results as $d_c^{(n)}$ and compute $\delta_c^{(n)} = (d_c^{(n)})^{-1}\sum_{j \neq c}\psi_{cj}^{(n)} - \bar{Y}$, or $-\bar{Y}$ if $d_c^{(n)} = 0$.
-The full $N \times p$ matrix $\bm{\Delta}$ requires no model access and no background dataset; $\bm{\Phi}$ is queried but not modified.
-
-\paragraph{Row-level and aggregate use.}
-The attribution matrix $\bm{\Delta}$ supports two uses from a single trained $\bm{\Phi}$.
-Row-level: $\delta_c^{(n)}$ measures how column $c$'s pairwise context for row $n$ deviates from the global baseline — two rows identical in column $c$ but differing in other columns receive different $\delta_c$ scores, because $\psi_{cj}^{(n)}$ depends on all columns' bin labels.
-Aggregate: $\bar{\delta}_c = N^{-1}\sum_n \delta_c^{(n)}$ ranks features by their consistent association with above- or below-average outcomes across the dataset.
-
-\paragraph{Memory and chunk size.}
-The hash map contains at most $O(p^2 B^2)$ distinct $(u,v)$ keys (Proposition~\ref{prop:complexity}), bounded independently of $N$ and $V^2$.
-Chunk size governs peak working memory and I/O granularity while scanning $\mathcal{D}$; because accumulation is additive (Remark~\ref{prop:chunk-additive}), the trained $\bm{\Phi}$ does not depend on how rows are grouped into chunks.
+The algorithm proceeds in three phases: Phase~1 builds $\mathcal{B}$ (Remark~\ref{rem:stream-phase1}); Phase~2 accumulates $(\bm{W},\bm{C})$ under keys $\kappa(u,v)$ with per-chunk threshold $\theta_k$ (Definition~\ref{def:accumulator}), then forms $\bm{\Phi}$ via \eqref{eq:Phi}; Phase~3 applies Definitions~\ref{def:pairwise-score}--\ref{def:delta} to produce $\bm{\Delta}$.
+The practitioner fixes $Y^{(n)} \in \mathbb{R}$ per accumulator instance (raw label, class probability, or model output $\hat{f}(\bm{x}^{(n)})$); no further distributional assumption is required beyond measurability.
 
 \section{Related Work}
 \label{sec:related}
@@ -562,7 +533,7 @@ Using predicted model outputs $\hat{f}(\bm{x}^{(n)})$ shifts the interpretation:
 Both modes produce the same format of $\bm{\Delta}$; the difference is entirely in what $Y^{(n)}$ represents.
 
 \paragraph{Chunking and stationary extensions.}
-Additive accumulation (Remark~\ref{prop:chunk-additive}) makes the interaction graph invariant to chunk boundaries under a stationary data stream.
+When $\theta_k = 0$ for all chunks, accumulation is invariant to chunk boundaries under a stationary data stream (Remark~\ref{prop:chunk-additive}).
 When the regime is non-stationary (e.g., temporal drift), a constant $\bm{\Phi}$ trained over long horizons mixes regimes; emphasizing recent observations would require deliberate modifications such as decay weights or sliding windows rather than reshaping chunks alone.
 
 \paragraph{Correlated features.}

@@ -89,9 +89,11 @@ $\mathcal{C}$ & Column pair set & $\{(i,j) : 1 \le i < j \le p\}$; $|\mathcal{C}
 
 $(u,v)$ & Value pair & Encoded label pair $(\ell^{(i)}(X_i^{(n)}),\, \ell^{(j)}(X_j^{(n)})) \in [V]^2$. & Phase 2 \\[4pt]
 
+$\kappa(u,v)$ & Canonical key & $(\min\{u,v\}, \max\{u,v\})$; all accumulation and lookup use $\kappa$. & Phase 2; inference \\[4pt]
+
 $\alpha$ & Threshold rate & Configurable significance rate in $[0,1)$; default $\alpha = 0.01$. & Phase 2 \\[4pt]
 
-$\theta_k$ & Significance threshold & $\lfloor \alpha \cdot n_k \rfloor$; minimum per-chunk occurrence count for a value pair to enter the accumulator. & Phase 2 \\[4pt]
+$\theta_k$ & Significance threshold & $\lfloor \alpha \cdot n_k \rfloor$; a value pair contributes to chunk $k$ only if its chunk-local count exceeds $\theta_k$. & Phase 2 \\[4pt]
 
 $\bm{W}$ & Sum accumulator & Sparse matrix $\bm{W} \in \mathbb{R}^{V \times V}$; $W_{uv}$ accumulates the sum of $Y^{(n)}$ over co-occurrences of $(u,v)$. Symmetric by construction. & Phase 2 \\[4pt]
 
@@ -106,11 +108,11 @@ $G_\Phi$ & Interaction graph & Weighted undirected graph $(\mathcal{V}, E_\Phi, 
 \midrule
 \multicolumn{4}{@{}l}{\textit{Inference and attribution}} \\[2pt]
 
-$\psi_{ij}^{(n)}$ & Pairwise score & $\Phi_{\ell^{(i)}(X_i^{(n)}),\,\ell^{(j)}(X_j^{(n)})}$; single edge lookup in $\bm{\Phi}$ for column pair $(i,j)$ at sample $n$. & Inference \\[4pt]
+$\psi_{ij}^{(n)}$ & Pairwise score & $\Phi_{\kappa(\ell^{(i)}(X_i^{(n)}),\,\ell^{(j)}(X_j^{(n)}))}$; single edge lookup in $\bm{\Phi}$ for column pair $(i,j)$ at sample $n$. & Inference \\[4pt]
 
-$d_c^{(n)}$ & Active pair count & Number of column partners $j \neq c$ with a nonzero pairwise score for column $c$ at sample $n$; used as the normalization denominator. & Inference \\[4pt]
+$m_c$ & Partner count & Fixed number of column partners, $m_c = p - 1$; normalization denominator in $A_c^{(n)}$. & Inference \\[4pt]
 
-$A_c^{(n)}$ & Column attribution score & Mean pairwise score for column $c$ at sample $n$ over its $d_c^{(n)}$ nonzero partners: $d_c^{(n)^{-1}}\sum_{j \neq c} \psi_{cj}^{(n)}$. Zero if $d_c^{(n)} = 0$. & Inference \\[4pt]
+$A_c^{(n)}$ & Column attribution score & Mean pairwise score for column $c$ at sample $n$: $m_c^{-1}\sum_{j \neq c} \psi_{cj}^{(n)}$. & Inference \\[4pt]
 
 $\delta_c^{(n)}$ & Barn attribution & $\widetilde{\Phi}_c^{(n)} - \bar{Y}$; deviation of column $c$'s pairwise context from the global baseline for sample $n$. & Inference \\[4pt]
 

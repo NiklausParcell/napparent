@@ -28,3 +28,12 @@ htmlcov/
 
 # Custom
 data/
+
+# LaTeX build output (sources stay in paper/)
+paper/**/*.aux
+paper/**/*.out
+paper/**/*.log
+paper/**/*.fls
+paper/**/*.fdb_latexmk
+paper/**/*.synctex.gz
+paper/**/*.pdf

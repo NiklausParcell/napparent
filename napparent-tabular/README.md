@@ -115,7 +115,11 @@ Known differences:
 - Effect columns use a scalar global mean (reference `_barn` used a per-group bug).
 - Effect column order follows column index order, not hash iteration.
 - Output suffix is `_effect` (reference uses `_barn`).
-- Value-pair keys are canonical unordered `(min, max)` (reference keeps directed `(u,v)` and `(v,u)` separately).
+- Python reference keeps directed `(u,v)` keys separately; paper and crate use canonical $\kappa(u,v)$.
+
+## Theory
+
+Formal write-up of the tabular algorithm: [`paper/`](../paper/) (start with [`barn_effect_tight.tex`](../paper/barn_effect_tight.tex)).
 
 ## Roadmap
 
