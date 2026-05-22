@@ -746,7 +746,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "napparent-tabular"
-version = "0.6.0"
+version = "0.1.0"
 dependencies = [
  "arrow",
  "ctrlc",
@@ -759,7 +759,7 @@ dependencies = [
 
 [[package]]
 name = "napparent-tabular-py"
-version = "0.6.0"
+version = "0.1.0"
 dependencies = [
  "arrow",
  "arrow-pyarrow",

@@ -64,6 +64,7 @@ pub struct CtrlcGuard;
 
 impl CancelToken {
     /// Install a process-wide SIGINT handler that sets the token stop flag.
+    #[cfg(feature = "progress")]
     pub fn with_ctrlc_handler() -> Result<(Self, CtrlcGuard), String> {
         let stop = Arc::new(AtomicBool::new(false));
         let stop_handler = Arc::clone(&stop);
@@ -73,10 +74,17 @@ impl CancelToken {
         .map_err(|e| format!("ctrlc handler: {e}"))?;
         Ok((Self::from_flag(stop), CtrlcGuard))
     }
+
+    /// Install a process-wide SIGINT handler that sets the token stop flag.
+    #[cfg(not(feature = "progress"))]
+    pub fn with_ctrlc_handler() -> Result<(Self, CtrlcGuard), String> {
+        Err("enable the `progress` feature for SIGINT handling".into())
+    }
 }
 
 impl Drop for CtrlcGuard {
     fn drop(&mut self) {
+        #[cfg(feature = "progress")]
         let _ = ctrlc::set_handler(|| {});
     }
 }

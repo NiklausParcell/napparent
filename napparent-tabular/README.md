@@ -4,11 +4,12 @@
 
 ## Status
 
-**0.6.0 — early release.** The API may change. The supported entry point is
+**0.1.0 — early release.** The API may change. The supported entry point is
 `transform_record_batches` with a [`TransformConfig`](https://docs.rs/napparent-tabular).
-For large datasets, prefer [`transform_record_batches_chunked`](https://docs.rs/napparent-tabular)
-to avoid holding a second full copy at concat time.
-Lower-level types (`PairAggregator`, `PreprocessStream`) are exposed but unstable.
+For large datasets, use [`transform_record_batches_chunked`](https://docs.rs/napparent-tabular)
+and set [`TransformLimits`](https://docs.rs/napparent-tabular) — the default
+`transform_record_batches` concatenates all output batches and can OOM when row count × column
+count is large. Lower-level types (`PairAggregator`, `PreprocessStream`) are exposed but unstable.
 Output feature columns use an `_effect` suffix; outcomes are in `outcomes_effect`.
 
 ## Install
@@ -17,10 +18,11 @@ Output feature columns use an `_effect` suffix; outcomes are in `outcomes_effect
 cargo add napparent-tabular
 ```
 
-Optional Parquet support:
+Optional features:
 
 ```bash
-cargo add napparent-tabular --features parquet
+cargo add napparent-tabular --features progress   # TTY progress bars + SIGINT helper
+cargo add napparent-tabular --features parquet    # Parquet I/O
 ```
 
 ## Usage
@@ -55,17 +57,27 @@ let batches_out = transform_record_batches_chunked(&batches, "target_col", &cols
 `transform_record_batches` still concatenates for convenience; use chunked output when
 row count × column count is large.
 
+## Input conventions
+
+Before binning and accumulation:
+
+- Numerical `NaN` → `0`
+- Categorical missing / `NaN` → `"empty"` (maps to rare token ε when infrequent)
+- Outcome `NaN` → `0` (contributes zero to pair statistics)
+
+These match the default rules in the [theory write-up](https://github.com/NiklausParcell/napparent/tree/main/paper).
+
 ## Arrow / ndarray bridge
 
-Numeric columns use [ndarrow](https://docs.rs/ndarrow) for zero-copy views from
+Numeric columns use [ndarrow](https://docs.rs/ndarrow) (pre-1.0, pinned) for zero-copy views from
 Apache Arrow `RecordBatch` data during preprocessing and aggregation training.
 Float32 effect columns are exported back to Arrow without an extra buffer copy.
 Binned label columns (`Utf8`) and KG HashMap state still allocate as before.
 
-Long runs: enable progress with `TransformConfig::new(depth).with_verbose(true)`
-(or Python `verbose=True`). On an interactive terminal this shows an in-place progress
-bar per pass; when stderr is piped, it falls back to throttled line logs.
-Ctrl+C cancels between batches (Python: `KeyboardInterrupt`).
+Long runs: enable progress with `TransformConfig::new(depth).with_verbose(true)`.
+With the `progress` feature on a TTY, stderr shows an in-place bar per pass; without the feature
+or when stderr is piped, verbose mode falls back to throttled line logs.
+Cooperative cancellation uses `CancelToken` (Python bindings wire `KeyboardInterrupt` via a hook).
 
 ## Activations
 
@@ -89,8 +101,14 @@ let config = TransformConfig::new(BinDepth::new(8));
 
 ## Python
 
-Workspace bindings live in `napparent-tabular-py`. Future PyPI package:
-`pip install napparent-tabular`.
+Python bindings live in the GitHub repo (`napparent-tabular-py`); **not on PyPI yet**.
+Install from a clone with maturin:
+
+```bash
+git clone https://github.com/NiklausParcell/napparent
+cd napparent
+maturin develop
+```
 
 ```python
 import napparent_tabular
@@ -106,13 +124,13 @@ chunks = napparent_tabular.transform_record_batches(
 )
 ```
 
-## Parity
+## Algorithm
 
-Behavior follows the algorithm in [`paper/`](../paper/) (canonical $\kappa(u,v)$ keys, fixed partner divisor $m_c = p - 1$, per-chunk threshold $\theta_k$).
+Behavior follows the Barn Effect algorithm (canonical κ keys, fixed partner divisor
+$m_c = p - 1$, per-chunk threshold $\theta_k$).
 
-## Theory
-
-Formal write-up of the tabular algorithm: [`paper/`](../paper/) (start with [`barn_effect_tight.tex`](../paper/barn_effect_tight.tex)).
+Formal write-up: [paper/](https://github.com/NiklausParcell/napparent/tree/main/paper)
+(start with [barn_effect_tight.tex](https://github.com/NiklausParcell/napparent/blob/main/paper/barn_effect_tight.tex)).
 
 ## Roadmap
 

@@ -2,6 +2,10 @@
 
 Rust workspace for **napparent-tabular** — apparent effect features on Apache Arrow batches.
 
+```bash
+cargo add napparent-tabular
+```
+
 | Path | Purpose |
 |------|---------|
 | [`napparent-tabular/`](napparent-tabular/) | Core crate (`cargo add napparent-tabular`) |

@@ -81,6 +81,23 @@ impl PairAggregator {
         self.vals_map.len()
     }
 
+    fn combo_pair(&self, combo_id: usize) -> Result<(usize, usize), String> {
+        self.tup_combos
+            .get(&combo_id)
+            .copied()
+            .ok_or_else(|| format!("internal: unknown combo id {combo_id}"))
+    }
+
+    fn mapped_col<'a>(
+        &self,
+        x_mapped: &'a HashMap<usize, Array1<i32>>,
+        col_idx: usize,
+    ) -> Result<&'a Array1<i32>, String> {
+        x_mapped
+            .get(&col_idx)
+            .ok_or_else(|| format!("internal: missing mapped column {col_idx}"))
+    }
+
     pub fn initialize_inputs(
         &mut self,
         col_info: &ColGraph,
@@ -272,9 +289,9 @@ impl PairAggregator {
         let one_percent = ((n as f32) * 0.01).floor() as usize;
 
         for &c in &self.col_array {
-            let &(c1, c2) = self.tup_combos.get(&c).unwrap();
-            let a = x_mapped.get(&c1).unwrap();
-            let b = x_mapped.get(&c2).unwrap();
+            let (c1, c2) = self.combo_pair(c)?;
+            let a = self.mapped_col(&x_mapped, c1)?;
+            let b = self.mapped_col(&x_mapped, c2)?;
 
             let mut local: HashMap<(i32, i32), PairStats> = HashMap::new();
             for i in 0..n {
@@ -340,9 +357,9 @@ impl PairAggregator {
         let mut col_vals = Array2::<f32>::zeros((n, m));
 
         for (mi, &combo_id) in self.col_array.iter().enumerate() {
-            let &(c1, c2) = self.tup_combos.get(&combo_id).unwrap();
-            let a = x_mapped.get(&c1).unwrap();
-            let b = x_mapped.get(&c2).unwrap();
+            let (c1, c2) = self.combo_pair(combo_id)?;
+            let a = self.mapped_col(&x_mapped, c1)?;
+            let b = self.mapped_col(&x_mapped, c2)?;
             for i in 0..n {
                 let tup = canonical_val_pair(a[i], b[i]);
                 let v = *self.vals_map_avg.get(&tup).unwrap_or(&0.0);
@@ -363,7 +380,7 @@ impl PairAggregator {
 
         let mut col_combined: HashMap<usize, Array1<f32>> = HashMap::new();
         for &combo_id in &self.col_array {
-            let &(c1, c2) = self.tup_combos.get(&combo_id).unwrap();
+            let (c1, c2) = self.combo_pair(combo_id)?;
             let col_view = col_vals_outcomes.column(combo_id);
             for &col_idx in &[c1, c2] {
                 col_combined

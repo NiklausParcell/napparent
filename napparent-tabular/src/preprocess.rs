@@ -402,7 +402,10 @@ impl PreprocessStream {
         let mut out = HashMap::new();
         for col_idx in 0..chunk.names.len() {
             let name = chunk.names[col_idx].clone();
-            let col = chunk.cols.get(col_idx).unwrap();
+            let col = chunk
+                .cols
+                .get(col_idx)
+                .ok_or_else(|| format!("internal: missing column index {col_idx}"))?;
             if let Some(cp) = self.preprocess_map.get(&col_idx) {
                 match cp.bin_type {
                     BinType::Numerical => {
@@ -444,7 +447,10 @@ impl PreprocessStream {
         let mut out = HashMap::new();
         for col_idx in 0..chunk.names.len() {
             let name = chunk.names[col_idx].clone();
-            let col = chunk.cols.get(col_idx).unwrap();
+            let col = chunk
+                .cols
+                .get(col_idx)
+                .ok_or_else(|| format!("internal: missing column index {col_idx}"))?;
             if let Some(cp) = self.preprocess_map.get(&col_idx) {
                 match cp.bin_type {
                     BinType::Numerical => {
