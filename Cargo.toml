@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["nnm-tabular-core", "nnm-tabular-py"]
+members = ["napparent-tabular", "napparent-tabular-py"]
 
 [workspace.package]
 version = "0.1.0"

@@ -1,0 +1,27 @@
+[package]
+name = "napparent-tabular"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "napparent tabular preprocessing — apparent effect features on Apache Arrow batches"
+readme = "README.md"
+authors = ["Nik Parcell <nikparcell@gmail.com>"]
+repository = "https://github.com/NiklausParcell/napparent"
+homepage = "https://github.com/NiklausParcell/napparent"
+documentation = "https://docs.rs/napparent-tabular"
+keywords = ["napparent", "arrow", "tabular", "transparency", "preprocessing"]
+categories = ["science"]
+
+[features]
+default = []
+progress = ["dep:indicatif", "dep:ctrlc"]
+parquet = ["dep:parquet", "dep:tokio"]
+
+[dependencies]
+arrow = { version = "58", default-features = true }
+ndarray = "0.17"
+ndarrow = "0.0.4"
+parquet = { version = "58", default-features = false, features = ["arrow", "async"], optional = true }
+indicatif = { version = "0.17", optional = true }
+ctrlc = { version = "3.4", optional = true }
+tokio = { version = "1", features = ["rt", "macros"], optional = true }
