@@ -16,25 +16,26 @@
 
 \title{The Barn Effect: A Streaming Algorithm for\\
 Pairwise Feature Attribution on Tabular Data\\
-\large Streaming Estimation of Log-Weighted Pairwise Conditional Means}
+\large Streaming Estimation of Pairwise Conditional Means via an Activation-Parameterized Interaction Graph}
 \author{Niklaus Parcell\\
 \textit{Mont Ops Inc.\ / Independent Research}\\
 \texttt{nik@mont-ops.com}}
-\date{\today}
+\date{May 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
 We present \emph{The Barn Effect}, a two-phase algorithm for per-sample feature attribution on tabular data supporting regression, binary classification, and multi-class classification targets.
-Conceptually $\bm{\Phi}$ is a \emph{streaming sufficient-statistic summary} of pairwise stratum-wise outcome structure under a chosen quantization $\mathcal{B}$.
+Conceptually $\bm{\Phi}^\phi$ is a \emph{streaming sufficient-statistic summary} of pairwise stratum-wise outcome structure under a chosen quantization $\mathcal{B}$ and a KG-pair activation $\phi$.
 The first phase discretizes each column into a finite set of labeled bins via frequency-ranked boundaries, building a compact vocabulary of value labels shared across all columns.
-The second phase accumulates, for every pair of columns and every co-occurring pair of bin labels, a \emph{log-frequency-weighted conditional mean} of the outcome variable, producing a sparse interaction graph $\bm{\Phi}$ as the learned model artifact.
+The second phase accumulates, for every pair of columns and every co-occurring pair of bin labels, an \emph{activation-parameterized conditional mean} of the outcome variable, producing a sparse interaction graph $\bm{\Phi}^\phi$ as the learned model artifact; the reference crate exposes $\phi_{\log}$ (log-frequency damped, default) and $\phi_{\mathrm{mean}}$ (pure conditional mean) as the two standard choices.
 Both phases are streaming-compatible, operating on fixed-size chunks without materializing the full dataset.
 The outcome $Y^{(n)}$ is \emph{parametric-optional}: it may be the raw target label or the predicted output of any trained model (gradient-boosted trees, random forests, neural networks, etc.), making the algorithm applicable both as a direct data analysis tool and as a model-agnostic explainer.
-At inference, each sample's bin labels are routed through $\bm{\Phi}$ via edge lookups, producing a per-column attribution score for that row.
+At inference, each sample's bin labels are routed through $\bm{\Phi}^\phi$ via edge lookups, producing a per-column attribution score $\delta_c^{(n)}$ via effect activation $e$, with default $e_{\mathrm{contrast}}(A, \bar{Y}) = A - \bar{Y}$.
 Averaging these scores across rows yields a global feature importance ranking; reading them per-row yields individual prediction explanation.
-We provide formal definitions, a convergence result connecting $\bm{\Phi}$ to conditional expectation, and complexity bounds scaling as $O(p^2 N)$ in training and $O(p^2)$ per inference sample.
+We provide formal definitions, the activation class and its instances, a strong-law convergence result connecting $\bm{\Phi}^\phi$ to conditional expectation, and complexity bounds scaling as $O(p^2 N)$ in training and $O(p^2)$ per inference sample.
+This note develops the definitions and convergence theory for the resulting interaction graph; empirical benchmarks against SHAP, LIME, and ICE are deferred to future work.
 \end{abstract}
 
 \section{Introduction}
@@ -323,26 +324,52 @@ When $\theta_k = 0$ for all $k$, $W_{\kappa}$ and $C_{\kappa}$ depend only on $\
 Consequently, $(\bm{W}, \bm{C})$ are sufficient statistics for $\bm{\Phi}$ given the chosen partition and thresholds.
 \end{remark}
 
-\begin{definition}[Interaction graph]
-\label{def:graph}
-The \emph{interaction graph} is the sparse matrix $\bm{\Phi} \in \mathbb{R}^{V \times V}$ with entries
+\begin{definition}[KG-pair activation]
+\label{def:kg-activation}
+A \emph{KG-pair activation} is any function $\phi : \mathbb{R} \times \mathbb{R}_{\ge 0} \to \mathbb{R}$ satisfying the boundary convention
+\[
+  \phi(s, 0) \;=\; \phi(s, 1) \;=\; 0 \qquad \text{for all } s \in \mathbb{R}.
+\]
+The \emph{activation class of interest} for this paper consists of functions of the form
 \begin{equation}
-  \Phi_{uv} \;\coloneqq\; \begin{cases}
-    0 & \text{if } C_{uv} \in \{0,1\}, \\[6pt]
-    \dfrac{W_{uv}}{C_{uv}} \cdot \log_{10}(C_{uv}) & \text{otherwise,}
-  \end{cases}
-  \label{eq:Phi}
+  \phi(s, c) \;=\; \frac{s}{c} \cdot g(c) \qquad (c > 1),
+  \label{eq:phi-class}
 \end{equation}
-equivalently $\bm{\Phi} = (\bm{W} \oslash \bm{C}) \odot \log_{10}(\bm{C})$ on the support $\{(u,v) : C_{uv} > 1\}$.
+where $g : (1, \infty) \to \mathbb{R}_{> 0}$ is continuous. Concrete instances:
+\begin{itemize}
+  \item $\phi_{\log}(s, c) \coloneqq (s/c) \cdot \log_{10}(c)$, i.e.\ $g = \log_{10}$ --- the \emph{default} used by the reference crate;
+  \item $\phi_{\mathrm{mean}}(s, c) \coloneqq s/c$, i.e.\ $g \equiv 1$ --- pure conditional mean, implemented alongside the default;
+  \item $\phi_{\log\!1\mathrm{p}}(s, c) \coloneqq (s/c) \cdot \log_{10}(c + 1)$, i.e.\ $g(c) = \log_{10}(c+1)$ --- a singleton-tolerant illustration kept paper-only.
+\end{itemize}
+The boundary convention $\phi(s, 1) = 0$ is a deliberate suppression of singleton-cell estimates: it agrees with the natural boundary for $\phi_{\log}$ (since $\log_{10}(1) = 0$) and is enforced as a convention for the rest of the class so that the singleton-cell suppression matches across activations.
 \end{definition}
 
-The matrix $\bm{\Phi}$ is the weighted adjacency matrix of the \emph{interaction graph}
+\begin{definition}[Interaction graph under $\phi$]
+\label{def:graph}
+Fix a KG-pair activation $\phi$ (Definition~\ref{def:kg-activation}).
+The \emph{interaction graph under $\phi$} is the sparse matrix $\bm{\Phi}^\phi \in \mathbb{R}^{V \times V}$ with entries
+\begin{equation}
+  \Phi^\phi_{uv} \;\coloneqq\; \phi(W_{uv},\, C_{uv}).
+  \label{eq:Phi}
+\end{equation}
+Restricted to the class~\eqref{eq:phi-class}, this evaluates to
+\[
+  \Phi^\phi_{uv} \;=\;
+  \begin{cases}
+    0 & \text{if } C_{uv} \in \{0, 1\}, \\[6pt]
+    \dfrac{W_{uv}}{C_{uv}} \cdot g(C_{uv}) & \text{if } C_{uv} > 1.
+  \end{cases}
+\]
+The default choice $\phi = \phi_{\log}$ recovers $\Phi^{\phi_{\log}}_{uv} = (W_{uv}/C_{uv})\cdot\log_{10}(C_{uv})$, equivalently $\bm{\Phi}^{\phi_{\log}} = (\bm{W} \oslash \bm{C}) \odot \log_{10}(\bm{C})$ on $\{(u,v) : C_{uv} > 1\}$. When the activation is the default we write simply $\bm{\Phi}$ and $\Phi_{uv}$.
+\end{definition}
+
+The matrix $\bm{\Phi}^\phi$ is the weighted adjacency matrix of the \emph{interaction graph}
 \[
   G_\Phi \;=\; \bigl(\mathcal{V},\; E_\Phi,\; w_\Phi\bigr),
 \]
-where $\mathcal{V} = [V]$ is the bin-label vocabulary, $E_\Phi = \{(u,v) : \Phi_{uv} \neq 0\}$ is the edge set, and $w_\Phi(u,v) = \Phi_{uv}$ is the edge weight function.
-We use $\bm{\Phi}$ and $G_\Phi$ interchangeably: $\bm{\Phi}$ for matrix operations, $G_\Phi$ for graph language.
-The $C_{uv} = 1$ boundary case falls out naturally: $\log_{10}(1) = 0$, so a single observation contributes zero; together with $C_{uv} = 0$ this yields $\Phi_{uv} = 0$ for both absent and singleton pairs.
+where $\mathcal{V} = [V]$ is the bin-label vocabulary, $E_\Phi = \{(u,v) : \Phi^\phi_{uv} \neq 0\}$ is the edge set, and $w_\Phi(u,v) = \Phi^\phi_{uv}$ is the edge weight function.
+We use $\bm{\Phi}^\phi$ and $G_\Phi$ interchangeably: $\bm{\Phi}^\phi$ for matrix operations, $G_\Phi$ for graph language.
+The boundary cases $C_{uv} \in \{0, 1\}$ both yield $\Phi^\phi_{uv} = 0$ by the convention of Definition~\ref{def:kg-activation}: for $\phi_{\log}$ this is also analytic since $\log_{10}(1) = 0$, while for the rest of the class it is the deliberate singleton-cell suppression.
 
 \begin{remark}[Undirected edges]
 \label{rem:symmetry}
@@ -355,10 +382,11 @@ The accumulator stores each event under the canonical key $\kappa(u,v)$ (Definit
 
 \begin{definition}[Per-sample pairwise score]
 \label{def:pairwise-score}
+Fix a KG-pair activation $\phi$ (Definition~\ref{def:kg-activation}).
 For sample $n$ and column pair $(i,j) \in \mathcal{C}$, the \emph{pairwise score} is
 \begin{equation}
   \psi_{ij}^{(n)} \;\coloneqq\;
-  \Phi_{\,\kappa\bigl(\ell^{(i)}(X_i^{(n)}),\,\ell^{(j)}(X_j^{(n)})\bigr)}.
+  \Phi^\phi_{\,\kappa\bigl(\ell^{(i)}(X_i^{(n)}),\,\ell^{(j)}(X_j^{(n)})\bigr)}.
   \label{eq:psi}
 \end{equation}
 This is a single entry lookup in $G_\Phi$ under the canonical key $\kappa$.
@@ -384,15 +412,26 @@ The same edge weight appears in $A_c^{(n)}$ for column $c$ and in $A_{c'}^{(n)}$
 Unlike Shapley-based methods, the Barn Effect makes no attempt to allocate the joint effect of a co-occurrence to one side: both columns ``see'' the same signal, and the user interprets their attributions as correlated evidence rather than a partition of a fixed budget.
 \end{remark}
 
+\begin{definition}[Effect activation]
+\label{def:effect-activation}
+An \emph{effect activation} is any function $e : \mathbb{R} \times \mathbb{R} \to \mathbb{R}$ combining a column attribution score with a baseline.
+The default is the \emph{global-mean contrast}
+\[
+  e_{\mathrm{contrast}}(A, \bar{Y}) \;\coloneqq\; A - \bar{Y},
+\]
+which produces the Barn attribution below.
+Alternative effect activations (e.g.\ standardized contrasts) are left for future work; the reference crate currently exposes only $e_{\mathrm{contrast}}$.
+\end{definition}
+
 \begin{definition}[Barn attribution]
 \label{def:delta}
 Let $\bar{Y} \coloneqq N^{-1}\sum_{n=1}^{N} Y^{(n)}$ be the global outcome mean.
-The \emph{Barn attribution} for column $c$ at sample $n$ is
+Given an effect activation $e$ (Definition~\ref{def:effect-activation}), the \emph{Barn attribution} for column $c$ at sample $n$ is
 \begin{equation}
-  \delta_c^{(n)} \;\coloneqq\; A_c^{(n)} - \bar{Y}.
+  \delta_c^{(n)} \;\coloneqq\; e\bigl(A_c^{(n)},\, \bar{Y}\bigr).
   \label{eq:delta}
 \end{equation}
-A positive value of $\delta_c^{(n)}$ indicates that column $c$'s pairwise context in row $n$ is associated with outcomes above the global mean; a negative value indicates the opposite.
+With the default $e = e_{\mathrm{contrast}}$ this reduces to $\delta_c^{(n)} = A_c^{(n)} - \bar{Y}$: a positive value indicates that column $c$'s pairwise context in row $n$ is associated with outcomes above the global mean; a negative value indicates the opposite.
 \end{definition}
 
 \begin{remark}[No efficiency axiom]
@@ -451,35 +490,81 @@ Practitioners configure the depth $B_i$ and the frequency-based construction (se
 Extending Proposition~\ref{prop:convergence} to jointly random $(\mathcal{B}_N,\bm{\Phi})$ requires additional analysis; we do not pursue it here.
 \end{assumption}
 
-\begin{proposition}[Convergence of $\bm{\Phi}$ to scaled conditional expectation]
+\begin{proposition}[Convergence of $\bm{\Phi}^\phi$ to scaled conditional expectation]
 \label{prop:convergence}
 Assume Assumption~\ref{asm:fixed-bins}.
 Suppose $\{(\bm{x}^{(n)}, Y^{(n)})\}$ are i.i.d.\ with $\mathbb{E}[|Y|] < \infty$.
 Fix $(i,j) \in \mathcal{C}$ and $(u,v) \in [V]^2$ with $\pi \coloneqq P(\ell^{(i)}(X_i)=u,\,\ell^{(j)}(X_j)=v) > 0$.
+Let $\phi(s, c) = (s/c) \cdot g(c)$ belong to the activation class of Definition~\ref{def:kg-activation}, and assume the \emph{class condition}
+\begin{equation}
+  \frac{g(c)}{g(N\pi)} \;\xrightarrow{\;\mathrm{a.s.}\;}\; 1
+  \qquad \text{along trajectories with } c, N \to \infty \text{ and } c/N \to \pi > 0.
+  \label{eq:class-cond}
+\end{equation}
 Then
 \begin{equation}
-  \frac{\Phi_{uv}}{\log_{10}(N\pi)}
+  \frac{\Phi^\phi_{uv}}{g(N\pi)}
   \;\xrightarrow{\;\mathrm{a.s.}\;}\;
   \mathbb{E}\!\bigl[Y \mid \ell^{(i)}(X_i)=u,\;\ell^{(j)}(X_j)=v\bigr]
   \quad\text{as } N\to\infty.
   \label{eq:convergence}
 \end{equation}
+Both default activations of interest satisfy~\eqref{eq:class-cond} (Remark~\ref{rem:class-cond}).
 \end{proposition}
 
-\begin{proof}[Proof sketch]
-By the strong law of large numbers, $C_{uv}/N \xrightarrow{\mathrm{a.s.}} \pi$.
-Since $\log_{10}$ is continuous on $(0,\infty)$ and $\pi > 0$, the continuous mapping theorem gives $\log_{10}(C_{uv}/N) \xrightarrow{\mathrm{a.s.}} \log_{10}(\pi)$, and therefore
+\begin{proof}
+The argument is three labelled SLLN steps combined by Slutsky.
+
+\textbf{Step 1 (count-side SLLN).}
+The indicators $E_n \coloneqq \mathbf{1}\{\ell^{(i)}(X_i^{(n)}) = u,\; \ell^{(j)}(X_j^{(n)}) = v\}$ are i.i.d.\ Bernoulli$(\pi)$. By the strong law of large numbers \cite[Thm.~2.4.1]{Durrett2019},
 \[
-  \log_{10}(C_{uv}) \;=\; \log_{10}(N) + \log_{10}(C_{uv}/N) \;\xrightarrow{\mathrm{a.s.}}\; \log_{10}(N) + \log_{10}(\pi) \;=\; \log_{10}(N\pi).
+  \frac{C_{uv}}{N} \;=\; \frac{1}{N}\sum_{n=1}^{N} E_n \;\xrightarrow{\mathrm{a.s.}}\; \pi.
 \]
-Separately, the subsequence of samples with the specified bin labels grows without bound (since $\pi>0$), so $W_{uv}/C_{uv} \xrightarrow{\mathrm{a.s.}} \mathbb{E}[Y \mid \ell^{(i)}(X_i)=u,\,\ell^{(j)}(X_j)=v]$ by the strong law applied to that subsequence.
-Multiplying and dividing by $\log_{10}(N\pi)$ yields \eqref{eq:convergence}.
+In particular $C_{uv} \to \infty$ a.s.\ since $\pi > 0$.
+
+\textbf{Step 2 (stratum sub-sample SLLN).}
+Let $\tau(k)$ denote the index of the $k$-th sample with $E_{\tau(k)} = 1$. Because $\{(\bm{x}^{(n)}, Y^{(n)})\}$ are i.i.d., the sub-sequence $\{Y^{(\tau(k))}\}_{k \ge 1}$ is itself i.i.d.\ with common law $\mathcal{L}(Y \mid E_1 = 1)$ and mean
+\[
+  \mu \;\coloneqq\; \mathbb{E}\!\bigl[Y \mid \ell^{(i)}(X_i) = u,\; \ell^{(j)}(X_j) = v\bigr],
+\]
+finite since $\mathbb{E}|Y| < \infty$. Applying the SLLN \cite[Thm.~2.4.1]{Durrett2019} to this sub-sequence on the prob-$1$ event $\{C_{uv} \to \infty\}$ from Step~1,
+\[
+  \frac{W_{uv}}{C_{uv}} \;=\; \frac{1}{C_{uv}}\sum_{k=1}^{C_{uv}} Y^{(\tau(k))}
+  \;\xrightarrow{\mathrm{a.s.}}\; \mu.
+\]
+
+\textbf{Step 3 (continuous mapping for $g$).}
+By Step~1, the realized trajectory $(c, N) = (C_{uv}, N)$ satisfies $c/N \to \pi$ a.s.\ with $c, N\pi \to \infty$ a.s.; the class condition~\eqref{eq:class-cond} then yields
+\[
+  \frac{g(C_{uv})}{g(N\pi)} \;\xrightarrow{\mathrm{a.s.}}\; 1.
+\]
+
+\textbf{Combine (Slutsky).}
+For $C_{uv} > 1$, which holds eventually a.s., $\Phi^\phi_{uv} = (W_{uv}/C_{uv}) \cdot g(C_{uv})$, so
+\[
+  \frac{\Phi^\phi_{uv}}{g(N\pi)}
+  \;=\; \frac{W_{uv}}{C_{uv}} \cdot \frac{g(C_{uv})}{g(N\pi)}
+  \;\xrightarrow{\mathrm{a.s.}}\; \mu \cdot 1 \;=\; \mu,
+\]
+which is~\eqref{eq:convergence}.
 \end{proof}
 
+\begin{remark}[Verification of the class condition]
+\label{rem:class-cond}
+For $g \equiv 1$ (giving $\phi_{\mathrm{mean}}$) the class condition~\eqref{eq:class-cond} holds trivially: $g(c)/g(N\pi) = 1$, and Proposition~\ref{prop:convergence} reduces to $W_{uv}/C_{uv} \xrightarrow{\mathrm{a.s.}} \mathbb{E}[Y \mid u,v]$.
+
+For $g = \log_{10}$ (giving the default $\phi_{\log}$), write
+\[
+  \frac{\log_{10}(c)}{\log_{10}(N\pi)}
+  \;=\; 1 \;+\; \frac{\log_{10}\!\bigl(c / (N\pi)\bigr)}{\log_{10}(N\pi)}.
+\]
+On the trajectory $c/N \to \pi$ from Step~1, $c/(N\pi) \to 1$ a.s.; continuity of $\log_{10}$ at $1$ gives $\log_{10}(c/(N\pi)) \to 0$ a.s., while the denominator $\log_{10}(N\pi) \to \infty$, so the ratio tends to $1$. This is the \emph{only} place a logarithm identity is invoked, and it appears throughout as a bounded ratio rather than as an equality between two divergent quantities.
+\end{remark}
+
 \begin{remark}
-Proposition~\ref{prop:convergence} shows $\Phi_{uv}$ is a consistent, frequency-scaled estimator of the conditional mean: entries for frequently co-occurring pairs (large $C_{uv}$) receive larger absolute weights, reflecting greater statistical confidence.
-Since $\Phi_{uv} = (W_{uv}/C_{uv}) \cdot \log_{10}(C_{uv})$, dividing $\Phi_{uv}$ by $\log_{10}(C_{uv})$ recovers the sample conditional mean $W_{uv}/C_{uv}$, which is a consistent estimator of $\mathbb{E}[Y \mid u,v]$ by the strong law of large numbers.
-In practice the raw $\Phi_{uv}$ values are preferred for attribution because they naturally downweight sparse evidence.
+Proposition~\ref{prop:convergence} shows $\Phi^\phi_{uv}$ is a consistent, $g$-scaled estimator of the conditional mean.
+Under $\phi_{\mathrm{mean}}$ the activation directly estimates $\mathbb{E}[Y \mid u,v]$ on the support $C_{uv} > 1$; under the default $\phi_{\log}$, entries for frequently co-occurring pairs (large $C_{uv}$) receive larger absolute weights, damping sparse pair cells via $\log_{10}(C_{uv})$.
+The choice between the two is interpretation-driven: $\phi_{\log}$ when sparse evidence must be downweighted in attribution, $\phi_{\mathrm{mean}}$ when interpretation on the original outcome scale matters.
 \end{remark}
 
 \begin{remark}[Column attributions and random support]
@@ -507,6 +592,7 @@ Persistent emptiness as $N\to\infty$ within that asymptotic regime is instead co
 
 The algorithm proceeds in three phases: Phase~1 builds $\mathcal{B}$ (Remark~\ref{rem:stream-phase1}); Phase~2 accumulates $(\bm{W},\bm{C})$ under keys $\kappa(u,v)$ with per-chunk threshold $\theta_k$ (Definition~\ref{def:accumulator}), then forms $\bm{\Phi}$ via \eqref{eq:Phi}; Phase~3 applies Definitions~\ref{def:pairwise-score}--\ref{def:delta} to produce $\bm{\Delta}$.
 The practitioner fixes $Y^{(n)} \in \mathbb{R}$ per accumulator instance (raw label, class probability, or model output $\hat{f}(\bm{x}^{(n)})$); no further distributional assumption is required beyond measurability.
+The reference crate \texttt{napparent-tabular}\footnote{Rust crate \texttt{napparent-tabular} with Python bindings \texttt{napparent-tabular-py}: \url{https://github.com/NiklausParcell/napparent}. Both default activations \texttt{LogFrequencyWeightedMean} ($\phi_{\log}$) and \texttt{ConditionalMean} ($\phi_{\mathrm{mean}}$) are exposed.} exposes $\phi_{\log}$ and $\phi_{\mathrm{mean}}$ as selectable KG-pair activations and $e_{\mathrm{contrast}}$ as the default effect activation.
 
 \section{Related Work}
 \label{sec:related}
@@ -551,7 +637,7 @@ A detailed treatment of these extensions, including multi-modal embeddings via c
 
 \paragraph{Speculative / heuristic: parametric gap graph.}
 This subsection is \emph{not} an evaluated diagnostic: no calibration, benchmarks, or hypothesis tests are claimed.
-Consider training $\bm{\Phi}_{\mathrm{data}}$ from raw labels $Y^{(n)}$ and $\bm{\Phi}_{\mathrm{model}}$ from model outputs $\hat{f}(\bm{x}^{(n)})$ on the same $\mathcal{B}$; on their shared edge support define
+Consider training $\bm{\Phi}_{\mathrm{data}}$ from raw labels $Y^{(n)}$ and $\bm{\Phi}_{\mathrm{model}}$ from model outputs $\hat{f}(\bm{x}^{(n)})$ on the same $\mathcal{B}$ and under the same KG-pair activation $\phi$ (the reference crate default is $\phi_{\log}$); on their shared edge support define
 \begin{equation}
   \bm{G} \;\coloneqq\; \bm{\Phi}_{\mathrm{data}} - \bm{\Phi}_{\mathrm{model}},
   \label{eq:gap}
@@ -560,28 +646,189 @@ informally termed a \emph{gap graph}.
 Large $|G_{uv}|$ is sometimes read as divergence between empirical co-outcome associations and model-implied associations for that discrete co-occurrence pattern; interpretations of sign (over- vs.\ underprediction) remain tentative without validated links to realized errors.
 
 The subtraction is only meaningful when both graphs use outcomes on comparable scales---e.g.\ $Y^{(n)}$ for $\bm{\Phi}_{\mathrm{data}}$ and $\hat{f}(\bm{x}^{(n)})$ for $\bm{\Phi}_{\mathrm{model}}$ drawn from the same rows.
+The subtraction requires the same KG-pair activation $\phi$ for both graphs (Definition~\ref{def:kg-activation}); under the default $\phi_{\log}$ this is automatic, but mixing activations subtracts incommensurable scalings of $W/C$ and yields no coherent quantity.
 Treat $|G_{uv}|$ as exploratory only: without statistical validation or domain-specific evaluation, it should not be advanced as formal model criticism.
 
 \paragraph{Further extensions.}
 Natural directions include:
 (i)~\emph{Temporal weighting}: replace $Y^{(n)}$ with $w^{(n)} Y^{(n)}$ where $w^{(n)} = \exp(-\lambda(t_{\max}-t^{(n)}))$ to emphasize recent observations;
 (ii)~\emph{Third-order interactions}: extend $\mathcal{C}$ to triples $(i,j,k)$ at $O(p^3 N)$ training cost;
-(iii)~\emph{Normalized scores}: divide $\Phi_{uv}$ by $\log_{10}(C_{uv})$ at inference to recover conditional mean estimates in the original outcome scale;
-and (iv)~\emph{Sketching}: approximate heavy co-occurrence structure (e.g., via count--min sketches) when exact $O(p^2 B^2)$ storage is prohibitive.
+and (iii)~\emph{Sketching}: approximate heavy co-occurrence structure (e.g., via count--min sketches) when exact $O(p^2 B^2)$ storage is prohibitive.
+Recovering the conditional mean $W_{uv}/C_{uv}$ in the original outcome scale is no longer listed here: it is the $\phi_{\mathrm{mean}}$ instance of the activation class (Definition~\ref{def:kg-activation}), selectable at training time rather than recovered at inference.
+
+\section{Limitations}
+\label{sec:limitations}
+
+The following five items consolidate the caveats scattered across the paper into one place for reviewers and first-time readers; the corresponding detailed remarks remain inline at their original locations.
+
+\paragraph{L1. Empirical bin schema (main theoretical gap).}
+Proposition~\ref{prop:convergence} holds under Assumption~\ref{asm:fixed-bins}, which requires the bin schema $\mathcal{B}$ to be treated as a nonrandom measurable function fixed before taking limits in $N$.
+In practice, Section~\ref{sec:discretize} prescribes a sample-constructed schema $\mathcal{B}_N$ that is both random and $N$-dependent; extending Proposition~\ref{prop:convergence} to jointly random $(\mathcal{B}_N, \bm{\Phi}^\phi)$ is not pursued here.
+This is the main open theoretical gap.
+An operational mitigation is to freeze $\mathcal{B}$ from a pilot or hold-out slice, then accumulate $(\bm{W}, \bm{C})$ on fresh data; see Assumption~\ref{asm:fixed-bins} for further discussion.
+
+\paragraph{L2. Fixed partner divisor $m_c = p - 1$.}
+Definition~\ref{def:col-attr} averages pairwise scores over all $m_c = p - 1$ column partners; absent pairs contribute zero rather than being excluded from the denominator (Remark~\ref{rem:support}).
+This conservative choice pulls sparse-partner columns toward zero, which is consistent with the identifiability limits discussed in Remark~\ref{rem:support}.
+Dividing instead by the count of partners with $C_{uv} > 1$ would inflate attributions for columns with little co-occurrence support---the opposite of the cautious behavior the boundary convention $\phi(s, 1) = 0$ is designed to enforce.
+
+\paragraph{L3. Sparse-cell identifiability.}
+As Remark~\ref{rem:support} details, absent or singleton entries $\Phi^\phi_{uv} = 0$ must not be read as confirming $\mathbb{E}[Y \mid u, v] = 0$: if $C_{uv} = 0$ the stratum is unseen in training; if $C_{uv} = 1$ the boundary convention suppresses an unreliable estimate.
+Sparse and empty contingency cells carry weak asymptotic justification for inferring cell-specific quantities without auxiliary assumptions \cite{Agresti2013,Manski2003}.
+
+\paragraph{L4. No efficiency axiom.}
+Barn attributions $\delta_c^{(n)}$ do not sum to $Y^{(n)} - \bar{Y}$; see Remark~\ref{rem:no-efficiency}.
+They are \emph{estimated descriptions} of pairwise-context associations, not a Shapley-style allocation of a fixed attribution budget.
+
+\paragraph{L5. No empirical benchmarks.}
+Comparison against SHAP, LIME, and ICE is deferred to future work; see the scope note in the Introduction and the future directions in Section~\ref{sec:conclusion}.
 
 \section{Conclusion}
+\label{sec:conclusion}
 
 The Barn Effect is a two-phase algorithm for per-sample feature attribution on tabular data.
 Phase~1 discretizes each column into a finite bin vocabulary using frequency-ranked boundaries.
-Phase~2 accumulates, for every co-occurring pair of bin labels across all column combinations, a log-frequency-weighted conditional mean of the outcome into a sparse interaction graph $\bm{\Phi}$.
+Phase~2 accumulates, for every co-occurring pair of bin labels across all column combinations, an activation-parameterized conditional mean $\bm{\Phi}^\phi$ of the outcome into a sparse interaction graph; the reference crate exposes $\phi_{\log}$ (log-frequency damped, default) and $\phi_{\mathrm{mean}}$ (pure conditional mean) as the two standard activations.
 Both phases operate in fixed memory over data chunks, making the algorithm applicable to datasets that exceed available memory and to continually arriving data streams.
-At inference, each row's bin labels are routed through $\bm{\Phi}$ via edge lookups, producing a per-column attribution score that measures how much each feature's pairwise context deviates from the global outcome baseline.
+At inference, each row's bin labels are routed through $\bm{\Phi}^\phi$ via edge lookups and combined via effect activation $e_{\mathrm{contrast}}$, producing per-column Barn attributions $\delta_c^{(n)}$ that measure how much each feature's pairwise context deviates from the global outcome baseline.
 
 The algorithm requires no model access, no gradient computation, and no background dataset at inference time.
 The outcome $Y^{(n)}$ is parametric-optional: raw labels produce a data-driven attribution; model outputs produce a model-agnostic explanation.
-The interaction graph $\bm{\Phi}$ is a reusable artifact---trained once, queried arbitrarily many times---whose entries converge almost surely to scaled conditional expectations of the outcome under Assumption~\ref{asm:fixed-bins} (Proposition~\ref{prop:convergence}).
+The interaction graph $\bm{\Phi}^\phi$ is a reusable artifact---trained once, queried arbitrarily many times---whose entries converge almost surely to scaled conditional expectations of the outcome under Assumption~\ref{asm:fixed-bins} (Proposition~\ref{prop:convergence}).
+This is v1 of a planned series.
 
-Future directions include controlled empirical benchmarks against SHAP and ICE on standard attribution tasks, theoretical characterization of the empirical bin schema $\mathcal{B}_N$ in Proposition~\ref{prop:convergence}, and extensions to higher-order interactions and non-tabular modalities as developed in a separate extensions note.
+\paragraph{Future directions.}
+The immediate v2 plans are controlled empirical benchmarks against SHAP, LIME, and ICE on standard attribution tasks, and a joint limit theorem for $(\mathcal{B}_N, \bm{\Phi}^\phi)$ to close the main theoretical gap identified in Section~\ref{sec:limitations}.
+On a longer horizon, the two-phase structure (Phases~2--3) and Proposition~\ref{prop:convergence} carry over unchanged when Phase~1 is replaced by a domain-appropriate encoder: separate preprints will apply this framework to text (token-pair co-occurrences), time-series (lag-pair bins), images (spatial patch pairs), and audio (frequency-band pairs), each reusing the same accumulator, convergence result, and inference machinery developed here.
+
+\appendix
+
+\section{Worked example: 3 columns, 6 rows}
+\label{app:worked-example}
+
+This appendix traces every computation from raw data through to Barn attributions for a minimal dataset, making the activation comparison concrete.
+All values are rounded to two decimal places; $\log_{10}(2) \approx 0.30$ and $\log_{10}(3) \approx 0.48$ are used throughout.
+
+\paragraph{Setup.}
+Three features (age, region, device) and scalar outcome $Y$, six rows, bin depth $B = 2$ for each column.
+
+\medskip
+\begin{center}
+\begin{tabular}{ccccc}
+\hline
+$n$ & age & region & device & $Y$ \\
+\hline
+1 & low  & A & mobile & 2.0 \\
+2 & low  & A & mobile & 4.0 \\
+3 & high & A & web    & 6.0 \\
+4 & high & B & web    & 8.0 \\
+5 & low  & B & mobile & 3.0 \\
+6 & high & B & web    & 7.0 \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Vocabulary (disjoint encoding, $V = 6$).}
+Phase~1 assigns each feature its own integer range, giving a vocabulary of size $V = 6$:
+
+\medskip
+\begin{center}
+\begin{tabular}{ccc}
+\hline
+Label & Column & Bin value \\
+\hline
+1 & age    & low    \\
+2 & age    & high   \\
+3 & region & A      \\
+4 & region & B      \\
+5 & device & mobile \\
+6 & device & web    \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent
+Encoded rows: $n=1,2$ map to $(1,3,5)$; $n=3$ to $(2,3,6)$; $n=4,6$ to $(2,4,6)$; $n=5$ to $(1,4,5)$.
+
+\paragraph{$W$ and $C$ accumulators.}
+There are $|\mathcal{C}| = 3$ column pairs.
+Column pair notation: (age,region) uses labels from $\{1,2\}\times\{3,4\}$; (age,device) from $\{1,2\}\times\{5,6\}$; (region,device) from $\{3,4\}\times\{5,6\}$.
+Canonical keys are $\kappa(u,v) = (\min(u,v), \max(u,v))$.
+
+\medskip
+\begin{center}
+\begin{tabular}{lcccc}
+\hline
+Pair (cols) & Key $\kappa$ & $W_{uv}$ & $C_{uv}$ & Note \\
+\hline
+(age, region)   & (1,3) & 6.0  & 2 & $n=1,2$ \\
+(age, region)   & (2,3) & 6.0  & 1 & $n=3$; boundary $\phi(s,1)=0$ \\
+(age, region)   & (2,4) & 15.0 & 2 & $n=4,6$ \\
+(age, region)   & (1,4) & 3.0  & 1 & $n=5$; boundary $\phi(s,1)=0$ \\
+(age, device)   & (1,5) & 9.0  & 3 & $n=1,2,5$ \\
+(age, device)   & (2,6) & 21.0 & 3 & $n=3,4,6$ \\
+(region, device) & (3,5) & 6.0  & 2 & $n=1,2$ \\
+(region, device) & (3,6) & 6.0  & 1 & $n=3$; boundary $\phi(s,1)=0$ \\
+(region, device) & (4,6) & 15.0 & 2 & $n=4,6$ \\
+(region, device) & (4,5) & 3.0  & 1 & $n=5$; boundary $\phi(s,1)=0$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Interaction graphs $\bm{\Phi}^{\phi_{\log}}$ and $\bm{\Phi}^{\phi_{\mathrm{mean}}}$.}
+Both activations applied to the same $(W,C)$ summary.
+Entries with $C \in \{0,1\}$ are zero by convention; shown only for non-zero cells.
+
+\medskip
+\begin{center}
+\begin{tabular}{ccc|cc}
+\hline
+Key & $W$ & $C$ & $\Phi^{\phi_{\log}} = \tfrac{W}{C}\log_{10}(C)$ & $\Phi^{\phi_{\mathrm{mean}}} = \tfrac{W}{C}$ \\
+\hline
+(1,3) & 6.0  & 2 & $3.00 \times 0.30 = 0.90$ & $3.00$ \\
+(2,4) & 15.0 & 2 & $7.50 \times 0.30 = 2.25$ & $7.50$ \\
+(1,5) & 9.0  & 3 & $3.00 \times 0.48 = 1.44$ & $3.00$ \\
+(2,6) & 21.0 & 3 & $7.00 \times 0.48 = 3.36$ & $7.00$ \\
+(3,5) & 6.0  & 2 & $3.00 \times 0.30 = 0.90$ & $3.00$ \\
+(4,6) & 15.0 & 2 & $7.50 \times 0.30 = 2.25$ & $7.50$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent
+Observation: under $\phi_{\mathrm{mean}}$, cells (1,3) and (1,5) both equal 3.00 even though (1,5) has more support ($C=3$ vs.\ $C=2$).
+Under $\phi_{\log}$, the higher-count cell (1,5) receives a larger weight (1.44 vs.\ 0.90), reflecting the log-frequency damping.
+The same $(W,C)$ summary yields different $\bm{\Phi}^\phi$---this is the payoff of the activation lift in concrete numbers.
+
+\paragraph{Row~1: $\psi$, $A$, $\delta$ under $\phi_{\log}$.}
+Row~1 encodes to $(1, 3, 5)$ (age=low, region=A, device=mobile); outcome $Y^{(1)} = 2.0$.
+Global mean: $\bar{Y} = (2+4+6+8+3+7)/6 = 5.00$.
+
+Pairwise scores ($m_c = p - 1 = 2$):
+\[
+  \psi_{\text{age,region}}^{(1)} = \Phi^{\phi_{\log}}_{(1,3)} = 0.90, \quad
+  \psi_{\text{age,device}}^{(1)} = \Phi^{\phi_{\log}}_{(1,5)} = 1.44, \quad
+  \psi_{\text{region,device}}^{(1)} = \Phi^{\phi_{\log}}_{(3,5)} = 0.90.
+\]
+
+Column attribution scores:
+\[
+  A_{\text{age}}^{(1)} = \tfrac{0.90 + 1.44}{2} = 1.17, \quad
+  A_{\text{region}}^{(1)} = \tfrac{0.90 + 0.90}{2} = 0.90, \quad
+  A_{\text{device}}^{(1)} = \tfrac{1.44 + 0.90}{2} = 1.17.
+\]
+
+Barn attributions ($\delta_c^{(1)} = A_c^{(1)} - \bar{Y}$):
+\[
+  \delta_{\text{age}}^{(1)} = 1.17 - 5.00 = -3.83, \quad
+  \delta_{\text{region}}^{(1)} = 0.90 - 5.00 = -4.10, \quad
+  \delta_{\text{device}}^{(1)} = 1.17 - 5.00 = -3.83.
+\]
+
+\noindent
+\emph{Interpretation.}
+Row~1 has $Y^{(1)} = 2.0$, well below the global mean of 5.00.
+All three Barn attributions are negative, indicating that the bin combination (age=low, region=A, device=mobile) is associated with below-average outcomes in the training data---consistent with the raw observation.
 
 \begin{thebibliography}{99}
 
@@ -649,6 +896,11 @@ J.~Gama, I.~\v{Z}liobait\.{e}, A.~Bifet, M.~Pechenizkiy, A.~Bouchachia.
 A.~Bifet, R.~Gavald\`{a}, G.~Holmes, B.~Pfahringer.
 \newblock \emph{Machine Learning for Data Streams}.
 \newblock MIT Press, 2018.
+
+\bibitem{Durrett2019}
+R.~Durrett.
+\newblock \emph{Probability: Theory and Examples}.
+\newblock Cambridge University Press, 5th edition, 2019.
 
 \end{thebibliography}
 

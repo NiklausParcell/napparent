@@ -16,7 +16,7 @@
 \author{Niklaus Parcell\\
 \textit{Mont Ops Inc.\ / Independent Research}\\
 \texttt{nik@mont-ops.com}}
-\date{\today}
+\date{May 2026}
 
 \begin{document}
 \maketitle
@@ -61,18 +61,29 @@ If $c_\kappa^{(k)}>\theta_k$, add to sparse $(W,C)$:
 \end{equation}
 otherwise $\Delta W_{\kappa}^{(k)}=\Delta C_{\kappa}^{(k)}=0$.
 Summing over chunks gives global $W_{\kappa},C_{\kappa}$ keyed by $\kappa(u,v)$; when $\theta_k=0$ for all $k$, totals are partition-invariant.
-\begin{definition}[Interaction graph]
-$\Phi_{\kappa}=0$ if $C_{\kappa}\in\{0,1\}$, else $\Phi_{\kappa}=(W_{\kappa}/C_{\kappa})\log_{10}(C_{\kappa})$.
+
+\begin{definition}[KG-pair activation $\phi$]
+\label{def:kg-act-tight}
+A KG-pair activation is $\phi:\mathbb{R}\times\mathbb{R}_{\ge 0}\to\mathbb{R}$ with boundary $\phi(s,0)=\phi(s,1)=0$ for all $s$.
+The class of interest is $\phi(s,c)=(s/c)\,g(c)$ for $c>1$ with continuous $g:(1,\infty)\to\mathbb{R}_{>0}$.
+Defaults: $\phi_{\log}$ ($g=\log_{10}$, the reference crate's default) and $\phi_{\mathrm{mean}}$ ($g\equiv 1$, pure conditional mean).
+\end{definition}
+
+\begin{definition}[Interaction graph under $\phi$]
+$\Phi^\phi_{\kappa}\coloneqq\phi(W_\kappa,C_\kappa)$; on the class, this is $0$ when $C_\kappa\in\{0,1\}$ and $(W_\kappa/C_\kappa)\,g(C_\kappa)$ otherwise.
+Under the default $\phi_{\log}$ we write $\Phi_\kappa=(W_\kappa/C_\kappa)\log_{10}(C_\kappa)$.
 \end{definition}
 
 \section{Inference}
-For row $n$, $\psi_{ij}^{(n)}=\Phi_{\kappa(\ell^{(i)}(X_i^{(n)}),\ell^{(j)}(X_j^{(n)}))}$.
+Fix activations $\phi$ (KG-pair, Definition~\ref{def:kg-act-tight}) and $e:\mathbb{R}\times\mathbb{R}\to\mathbb{R}$ (\emph{effect activation}; default $e_{\mathrm{contrast}}(A,\bar Y)\coloneqq A-\bar Y$).
+For row $n$, $\psi_{ij}^{(n)}=\Phi^\phi_{\kappa(\ell^{(i)}(X_i^{(n)}),\ell^{(j)}(X_j^{(n)}))}$.
 Let $m_c:=p-1$.
 \[
 A_c^{(n)}=\frac{1}{m_c}\sum_{j\neq c}\psi_{cj}^{(n)},
 \qquad
-\delta_c^{(n)}=A_c^{(n)}-\bar{Y},\quad \bar{Y}=\frac{1}{N}\sum_n Y^{(n)}.
+\delta_c^{(n)}=e\bigl(A_c^{(n)},\bar Y\bigr),\quad \bar{Y}=\frac{1}{N}\sum_n Y^{(n)};
 \]
+under default $e=e_{\mathrm{contrast}}$ this is $\delta_c^{(n)}=A_c^{(n)}-\bar Y$.
 Global score $\bar{\delta}_c=\frac{1}{N}\sum_n\delta_c^{(n)}$.
 Attributions do \emph{not} satisfy an efficiency axiom $\sum_c\delta_c^{(n)}=Y^{(n)}-\bar{Y}$ \cite{Lundberg2017}.
 
@@ -92,20 +103,26 @@ Proposition~\ref{prop:conv-tight} treats $\mathcal{B},\ell^{(i)}$ as nonrandom; 
 Joint limits for $(\mathcal{B}_N,\bm{\Phi})$ are not pursued.
 \end{remark}
 
-\begin{proposition}[Scaled a.s.\ limit for $\Phi_{uv}$]
+\begin{proposition}[Scaled a.s.\ limit for $\Phi^\phi_{uv}$]
 \label{prop:conv-tight}
-If $(\bm{x}^{(n)},Y^{(n)})$ are i.i.d., $\mathbb{E}|Y|<\infty$, $\mathcal{B}$ fixed, and $\pi=P(\ell^{(i)}(X_i)=u,\ell^{(j)}(X_j)=v)>0$, then
+Assume $(\bm{x}^{(n)},Y^{(n)})$ i.i.d., $\mathbb{E}|Y|<\infty$, $\mathcal{B}$ fixed, $\pi=P(\ell^{(i)}(X_i)=u,\ell^{(j)}(X_j)=v)>0$.
+Let $\phi(s,c)=(s/c)\,g(c)$ in the class of Definition~\ref{def:kg-act-tight} satisfy the \emph{class condition} $g(c)/g(N\pi)\to 1$ a.s.\ along trajectories with $c/N\to\pi>0$.
+Then
 \[
-\frac{\Phi_{uv}}{\log_{10}(N\pi)}\xrightarrow{\mathrm{a.s.}} \mathbb{E}\bigl[Y\mid \ell^{(i)}(X_i)=u,\ell^{(j)}(X_j)=v\bigr].
+\frac{\Phi^\phi_{uv}}{g(N\pi)}\xrightarrow{\mathrm{a.s.}} \mathbb{E}\bigl[Y\mid \ell^{(i)}(X_i)=u,\ell^{(j)}(X_j)=v\bigr].
 \]
+The class condition holds trivially for $g\equiv 1$ ($\phi_{\mathrm{mean}}$); for $g=\log_{10}$ ($\phi_{\log}$) it follows from $\log_{10}(c)/\log_{10}(N\pi)=1+\log_{10}(c/(N\pi))/\log_{10}(N\pi)\to 1$ since $c/(N\pi)\to 1$ a.s.\ and $\log_{10}(N\pi)\to\infty$.
 \end{proposition}
 \begin{proof}[Sketch]
-$C_{uv}/N\to\pi$ a.s.; $\log_{10}C_{uv}-\log_{10}N\to\log_{10}\pi$ a.s.; $W_{uv}/C_{uv}\to\mathbb{E}[Y\mid u,v]$ on the stratum.
-Combine and rescale.
+Three SLLN steps + Slutsky.
+(1)~\emph{Count-side SLLN.} The indicators $\mathbf 1\{\ell^{(i)}(X_i^{(n)})=u,\ell^{(j)}(X_j^{(n)})=v\}$ are i.i.d.\ Bernoulli$(\pi)$, so $C_{uv}/N\to\pi$ a.s.\ and $C_{uv}\to\infty$ \cite[Thm.~2.4.1]{Durrett2019}.
+(2)~\emph{Stratum sub-sample SLLN.} Letting $\tau(k)$ be the index of the $k$-th hit, $\{Y^{(\tau(k))}\}$ is i.i.d.\ with mean $\mu:=\mathbb{E}[Y\mid u,v]$; SLLN \cite[Thm.~2.4.1]{Durrett2019} gives $W_{uv}/C_{uv}\to\mu$ a.s.\ on $\{C_{uv}\to\infty\}$.
+(3)~\emph{Continuous mapping for $g$.} The class condition gives $g(C_{uv})/g(N\pi)\to 1$ a.s.
+Slutsky: $\Phi^\phi_{uv}/g(N\pi)=(W_{uv}/C_{uv})\cdot g(C_{uv})/g(N\pi)\to \mu$.
 \end{proof}
 
 \begin{remark}[Support]
-Zero $\Phi_{\kappa}$ does not imply $\mathbb{E}[Y\mid u,v]=0$: $C_{\kappa}=0$ means unseen; $C_{\kappa}=1$ is zeroed by construction.
+Zero $\Phi^\phi_\kappa$ does not imply $\mathbb{E}[Y\mid u,v]=0$: $C_\kappa=0$ means unseen, $C_\kappa=1$ is zeroed by the boundary convention $\phi(s,1)=0$ (Definition~\ref{def:kg-act-tight}).
 Sparse cells --- partial identification \cite{Manski2003}; inference cautions \cite{Agresti2013}.
 Column attribution averages over all $m_c=p-1$ partners; absent pairs contribute zero.
 \end{remark}
@@ -168,6 +185,11 @@ J.~Gama et al.
 A.~Bifet et al.
 \newblock \emph{Machine Learning for Data Streams}.
 \newblock MIT Press, 2018.
+
+\bibitem{Durrett2019}
+R.~Durrett.
+\newblock \emph{Probability: Theory and Examples}.
+\newblock Cambridge University Press, 5th ed., 2019.
 
 \end{thebibliography}
 

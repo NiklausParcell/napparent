@@ -435,6 +435,7 @@ impl Default for PairAggregator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::activation::{EffectActivation, KgPairActivation};
     use std::collections::HashMap;
 
     fn two_col_aggregator() -> PairAggregator {
@@ -491,6 +492,31 @@ mod tests {
             .unwrap();
         agg.finish_map();
         assert_eq!(agg.vals_map_avg.len(), agg.vals_map.len());
+    }
+
+    #[test]
+    fn finish_map_conditional_mean_activation() {
+        let mut agg = PairAggregator::with_activation(ActivationConfig {
+            kg_pair: KgPairActivation::ConditionalMean,
+            effect: EffectActivation::GlobalMeanContrast,
+        });
+        let cg = ColGraph {
+            names: vec!["a".into(), "b".into()],
+            dropped: HashSet::new(),
+        };
+        agg.initialize_inputs(&cg, "target", &["a".into(), "b".into()])
+            .unwrap();
+        agg.make_col_combos();
+        let x = oriented_pair_data();
+        agg.vals_map_updating(&x, &outcomes_slice(&[1.0, 2.0]))
+            .unwrap();
+        agg.finish_map();
+
+        let id5 = agg.val_map_str["5"];
+        let id7 = agg.val_map_str["7"];
+        let key = canonical_val_pair(id5, id7);
+        let v = agg.vals_map_avg[&key];
+        assert!((v - 1.5).abs() < 1e-5);
     }
 
     #[test]

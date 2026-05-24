@@ -1,9 +1,10 @@
 //! Pluggable activations for KG pair edges and effect columns.
 //!
 //! **KG pair activation** maps accumulated `(sum, count)` stats in `vals_map` to scalar edge
-//! weights in `vals_map_avg`. The default [`KgPairActivation::LogFrequencyWeightedMean`] applies
-//! `(sum / count) * log10(count)` when count > 1, down-weighting sparse pair cells to reduce
-//! outlier bias in the knowledge-graph structure.
+//! weights in `vals_map_avg`. [`KgPairActivation::LogFrequencyWeightedMean`] applies
+//! `(sum / count) * log10(count)` when count > 1, while
+//! [`KgPairActivation::ConditionalMean`] applies `sum / count` when count > 1. Both return 0
+//! for count <= 1 as the shared boundary convention.
 //!
 //! **Effect activation** maps per-row combined column signal to `{col}_effect` features. The
 //! default [`EffectActivation::GlobalMeanContrast`] subtracts the global mean outcome.
@@ -32,12 +33,15 @@ pub enum KgPairActivation {
     /// `(sum / count) * log10(count)` when count > 1, else 0.
     #[default]
     LogFrequencyWeightedMean,
+    /// `sum / count` when count > 1, else 0.
+    ConditionalMean,
 }
 
 impl KgPairActivation {
     pub fn activate(&self, stats: PairStats) -> f32 {
         match self {
             KgPairActivation::LogFrequencyWeightedMean => log_frequency_weighted_mean(stats),
+            KgPairActivation::ConditionalMean => conditional_mean(stats),
         }
     }
 }
@@ -47,6 +51,14 @@ fn log_frequency_weighted_mean(stats: PairStats) -> f32 {
         0.0
     } else {
         (stats.sum / stats.count) * stats.count.log10()
+    }
+}
+
+fn conditional_mean(stats: PairStats) -> f32 {
+    if stats.count <= 1.0 {
+        0.0
+    } else {
+        stats.sum / stats.count
     }
 }
 
@@ -125,6 +137,37 @@ mod tests {
     #[test]
     fn log_frequency_weighted_mean_cases() {
         let act = KgPairActivation::LogFrequencyWeightedMean;
+        assert_eq!(
+            act.activate(PairStats {
+                sum: 10.0,
+                count: 1.0
+            }),
+            0.0
+        );
+        assert_eq!(
+            act.activate(PairStats {
+                sum: 5.0,
+                count: 0.5
+            }),
+            0.0
+        );
+        let v = act.activate(PairStats {
+            sum: 50.0,
+            count: 10.0,
+        });
+        assert!((v - 5.0_f32).abs() < 1e-5);
+    }
+
+    #[test]
+    fn conditional_mean_cases() {
+        let act = KgPairActivation::ConditionalMean;
+        assert_eq!(
+            act.activate(PairStats {
+                sum: 10.0,
+                count: 0.0
+            }),
+            0.0
+        );
         assert_eq!(
             act.activate(PairStats {
                 sum: 10.0,

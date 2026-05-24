@@ -99,11 +99,15 @@ $\bm{W}$ & Sum accumulator & Sparse matrix $\bm{W} \in \mathbb{R}^{V \times V}$;
 
 $\bm{C}$ & Count accumulator & Sparse matrix $\bm{C} \in \mathbb{R}^{V \times V}$; $C_{uv}$ accumulates the number of co-occurrences of $(u,v)$. Symmetric by construction. & Phase 2 \\[4pt]
 
-$\bm{\Phi}$ & Interaction matrix & Sparse symmetric matrix $\bm{\Phi} \in \mathbb{R}^{V \times V}$; $\Phi_{uv} = (W_{uv}/C_{uv})\cdot\log_{10}(C_{uv})$ on the support $C_{uv} > 1$, zero otherwise. The trained model artifact. & Phase 2; inference \\[4pt]
+$\phi$ & KG-pair activation & Function $\phi:\mathbb{R}\times\mathbb{R}_{\ge 0}\to\mathbb{R}$ with boundary $\phi(s,0)=\phi(s,1)=0$. Class of interest: $\phi(s,c)=(s/c)\cdot g(c)$ for $c>1$. Defaults: $\phi_{\log}$ (reference crate's default) and $\phi_{\mathrm{mean}}$. & Phase 2; inference \\[4pt]
 
-$\Phi_{uv}$ & Edge weight & Log-frequency-weighted conditional mean of $Y$ given that bin $u$ and bin $v$ co-occurred in the same row. Entry $(u,v)$ of $\bm{\Phi}$; weight of edge $(u,v)$ in $G_\Phi$. & Phase 2; inference \\[4pt]
+$g$ & Rescaling factor & Continuous $g:(1,\infty)\to\mathbb{R}_{>0}$ inside $\phi(s,c)=(s/c)\,g(c)$. $g=\log_{10}$ for $\phi_{\log}$; $g\equiv 1$ for $\phi_{\mathrm{mean}}$. Class condition for convergence: $g(c)/g(N\pi)\to 1$ along $c/N\to\pi>0$. & Phase 2; properties \\[4pt]
 
-$G_\Phi$ & Interaction graph & Weighted undirected graph $(\mathcal{V}, E_\Phi, w_\Phi)$ with vertex set $\mathcal{V}=[V]$, edge set $E_\Phi = \{(u,v):\Phi_{uv}\neq 0\}$, and $w_\Phi(u,v)=\Phi_{uv}$. $\bm{\Phi}$ is its weighted adjacency matrix. & Phase 2; inference \\[4pt]
+$\bm{\Phi}^\phi$ & Interaction matrix (activation-parameterized) & Sparse symmetric matrix $\bm{\Phi}^\phi\in\mathbb{R}^{V\times V}$ with $\Phi^\phi_{uv}=\phi(W_{uv},C_{uv})$; on the class, equals $(W_{uv}/C_{uv})\,g(C_{uv})$ when $C_{uv}>1$, else $0$. Under default $\phi=\phi_{\log}$ written $\bm{\Phi}$ with $\Phi_{uv}=(W_{uv}/C_{uv})\log_{10}(C_{uv})$. The trained model artifact. & Phase 2; inference \\[4pt]
+
+$\Phi^\phi_{uv}$ & Edge weight & Activation-applied entry $\phi(W_{uv},C_{uv})$ for the canonical pair $(u,v)$; weight of edge $(u,v)$ in $G_\Phi$. Under default $\phi_{\log}$ written $\Phi_{uv}$. & Phase 2; inference \\[4pt]
+
+$G_\Phi$ & Interaction graph & Weighted undirected graph $(\mathcal{V}, E_\Phi, w_\Phi)$ with vertex set $\mathcal{V}=[V]$, edge set $E_\Phi = \{(u,v):\Phi^\phi_{uv}\neq 0\}$, and $w_\Phi(u,v)=\Phi^\phi_{uv}$. $\bm{\Phi}^\phi$ is its weighted adjacency matrix. & Phase 2; inference \\[4pt]
 
 \midrule
 \multicolumn{4}{@{}l}{\textit{Inference and attribution}} \\[2pt]
@@ -114,7 +118,9 @@ $m_c$ & Partner count & Fixed number of column partners, $m_c = p - 1$; normaliz
 
 $A_c^{(n)}$ & Column attribution score & Mean pairwise score for column $c$ at sample $n$: $m_c^{-1}\sum_{j \neq c} \psi_{cj}^{(n)}$. & Inference \\[4pt]
 
-$\delta_c^{(n)}$ & Barn attribution & $\widetilde{\Phi}_c^{(n)} - \bar{Y}$; deviation of column $c$'s pairwise context from the global baseline for sample $n$. & Inference \\[4pt]
+$e$ & Effect activation & Function $e:\mathbb{R}\times\mathbb{R}\to\mathbb{R}$ combining a column attribution with a baseline. Default $e_{\mathrm{contrast}}(A,\bar Y)\coloneqq A-\bar Y$; alternative activations (e.g.\ standardized contrasts) are future work. & Inference \\[4pt]
+
+$\delta_c^{(n)}$ & Barn attribution & $e\bigl(A_c^{(n)},\,\bar{Y}\bigr)$; under default $e=e_{\mathrm{contrast}}$, reduces to $A_c^{(n)}-\bar{Y}$: deviation of column $c$'s pairwise context from the global baseline for sample $n$. & Inference \\[4pt]
 
 $\bm{\Delta}$ & Attribution matrix & $N \times p$ matrix with $\Delta_{nc} = \delta_c^{(n)}$; full output of inference. & Inference \\[4pt]
 
@@ -125,7 +131,7 @@ $\bar{\delta}_c$ & Global importance & $N^{-1}\sum_n \delta_c^{(n)}$; mean Barn 
 
 $\pi$ & Pair probability & $P(\ell^{(i)}(X_i)=u,\, \ell^{(j)}(X_j)=v)$; joint probability of a value pair; appears in the convergence result. & Properties \\[4pt]
 
-$\bm{G}$ & Gap graph & $\bm{\Phi}_{\mathrm{data}} - \bm{\Phi}_{\mathrm{model}}$ on shared support; identifies co-occurrences where the model deviates from empirical statistics. Requires both graphs trained on outcomes with the same scale. & Discussion \\[4pt]
+$\bm{G}$ & Gap graph & $\bm{\Phi}^\phi_{\mathrm{data}} - \bm{\Phi}^\phi_{\mathrm{model}}$ on shared support; identifies co-occurrences where the model deviates from empirical statistics. Requires both graphs trained on outcomes with the same scale \emph{and} under the same KG-pair activation $\phi$. & Discussion \\[4pt]
 
 $\hat{f}$ & External model & Any trained model whose scalar output $\hat{f}(\bm{x}^{(n)})$ may be used as $Y^{(n)}$ in place of the raw label. & Throughout (parametric-optional) \\[4pt]
 

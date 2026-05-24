@@ -24,8 +24,9 @@ fn depth_from_args(main: usize, per_column: Option<Vec<(usize, usize)>>) -> BinD
 fn parse_kg_activation(name: &str) -> Result<KgPairActivation, String> {
     match name {
         "log_frequency_weighted_mean" => Ok(KgPairActivation::LogFrequencyWeightedMean),
+        "conditional_mean" => Ok(KgPairActivation::ConditionalMean),
         other => Err(format!(
-            "unknown kg_activation {other:?}; supported: \"log_frequency_weighted_mean\""
+            "unknown kg_activation {other:?}; supported: \"log_frequency_weighted_mean\", \"conditional_mean\""
         )),
     }
 }
